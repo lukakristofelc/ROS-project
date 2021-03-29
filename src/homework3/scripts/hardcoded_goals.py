@@ -53,16 +53,13 @@ def goToGoal():
         while client.get_state() in [0,1]:
             face_goal_message:FaceGoalsArray = rospy.wait_for_message("face_goals",FaceGoalsArray)
             if len(face_goal_message.goals)>face_goal_num:
-                if not g["goal_type"]=="face":
-                    client.cancel_goal()
-                    goalList.insert(0,g)
                 face_goals = face_goal_message.goals[face_goal_num:]
                 for face_goal in face_goals:
                     goalList.insert(0,{"goal_type":"face","cords":face_goal.coords})
                 face_goal_num=len(face_goal_message.goals)
             time.sleep(1)
-        #if client.get_state() == 3 and g["goal_type"]=="face":
-        #    soundhandle.say("Hello")   
+        if client.get_state() == 3 and g["goal_type"]=="face":
+            soundhandle.say("Hello")   
 
 
 if __name__ == "__main__":

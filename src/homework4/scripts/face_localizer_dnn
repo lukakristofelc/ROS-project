@@ -60,9 +60,13 @@ class face_localizer:
 
         angle_to_target1 = np.arctan2(face_x1,k_f)
         angle_to_target2 = np.arctan2(face_x2,k_f)
-
-        dist1 = float(np.nanmean(depth_image[y1:y2,x1]))
-        dist2 = float(np.nanmean(depth_image[y1:y2,x2]))
+        
+        try:
+            dist1 = float(np.nanmean(depth_image[y1:y2,x1]))
+            dist2 = float(np.nanmean(depth_image[y1:y2,x2]))
+        except Exception as e:
+            print(e)
+            return None,None
 
         x1, y1 = dist1*np.cos(angle_to_target1), dist1*np.sin(angle_to_target1)
         x2, y2 = dist2*np.cos(angle_to_target2), dist2*np.sin(angle_to_target2)
@@ -289,7 +293,7 @@ class face_localizer:
 
             face_goal = FaceGoals()
             face_goal.coords=(self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
-            norm=-self.centres_offsets[i,:2]/0.3
+            norm=self.centres_offsets[i,:2]/0.3
             face_goal.coords.extend(norm.tolist())
             face_goal_array.goals.append(face_goal)
 

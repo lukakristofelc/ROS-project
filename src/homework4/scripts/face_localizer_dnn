@@ -7,17 +7,16 @@ import cv2
 import numpy as np
 import tf2_geometry_msgs
 import tf2_ros
-import message_filters
-import time
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PointStamped, Vector3, Pose
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
+from scipy.spatial import distance
+from nav_msgs.msg import Odometry
+from homework4.msg import FaceGoals,FaceGoalsArray
 
-average=0
-num=0
 
 class face_localizer:
     def __init__(self):
@@ -33,20 +32,67 @@ class face_localizer:
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
-        # Marker array object used for showing markers in Rviz
-        self.marker_array = MarkerArray()
-        self.marker_num = 1
-
         # Subscribe to the image and/or depth topic
         # self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
         # self.depth_sub = rospy.Subscriber("/camera/depth/image_raw", Image, self.depth_callback)
 
         # Publiser for the visualization markers
         self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
+        self.face_goals_pub = rospy.Publisher('face_goals', FaceGoalsArray, queue_size=1000)
 
         # Object we use for transforming between coordinate frames
         self.tf_buf = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
+
+        self.num = 0
+        self.centres = np.empty((10,3))
+        self.all_points = []
+        self.centres_offsets = np.empty((10,3))
+        self.all_points_offsets = []
+
+    def get_pose_new(self,coords,depth_image,stamp):
+        k_f = 554
+
+        x1, x2, y1, y2 = coords
+
+        face_x1 = self.dims[1] / 2 - x1
+        face_x2 = self.dims[1] / 2 - x2
+
+        angle_to_target1 = np.arctan2(face_x1,k_f)
+        angle_to_target2 = np.arctan2(face_x2,k_f)
+
+        dist1 = float(np.nanmean(depth_image[y1:y2,x1]))
+        dist2 = float(np.nanmean(depth_image[y1:y2,x2]))
+
+        x1, y1 = dist1*np.cos(angle_to_target1), dist1*np.sin(angle_to_target1)
+        x2, y2 = dist2*np.cos(angle_to_target2), dist2*np.sin(angle_to_target2)
+
+        point_s1 = PointStamped()
+        point_s1.point.x = -y1
+        point_s1.point.y = 0
+        point_s1.point.z = x1
+        point_s1.header.frame_id = "camera_rgb_optical_frame"
+        point_s1.header.stamp = stamp
+
+        point_s2 = PointStamped()
+        point_s2.point.x = -y2
+        point_s2.point.y = 0
+        point_s2.point.z = x2
+        point_s2.header.frame_id = "camera_rgb_optical_frame"
+        point_s2.header.stamp = stamp
+
+        try:
+            point_world1 = self.tf_buf.transform(point_s1, "map")
+            point_world2 = self.tf_buf.transform(point_s2, "map")
+            pose1 = np.array([point_world1.point.x,point_world1.point.y,point_world1.point.z])
+            pose2 = np.array([point_world2.point.x,point_world2.point.y,point_world2.point.z])
+        except Exception as e:
+            print(e)
+            pose1 = None
+            pose2 = None
+        return pose1,pose2
+
+
 
 
     def get_pose(self,coords,dist,stamp):
@@ -60,6 +106,7 @@ class face_localizer:
         face_y = self.dims[0] / 2 - (y1+y2)/2.
 
         angle_to_target = np.arctan2(face_x,k_f)
+        
 
         # Get the angles in the base_link relative coordinate system
         x, y = dist*np.cos(angle_to_target), dist*np.sin(angle_to_target)
@@ -84,11 +131,7 @@ class face_localizer:
         try:
             point_world = self.tf_buf.transform(point_s, "map")
 
-            # Create a Pose object with the same position
-            pose = Pose()
-            pose.position.x = point_world.point.x
-            pose.position.y = point_world.point.y
-            pose.position.z = point_world.point.z
+            pose = np.array([point_world.point.x,point_world.point.y,point_world.point.z])
         except Exception as e:
             print(e)
             pose = None
@@ -97,86 +140,7 @@ class face_localizer:
     
 
     def find_faces(self):
-        #print('I got a new image')
-        
-        rgb_image_sub = message_filters.Subscriber("/camera/rgb/image_raw", Image)
-        depth_image_sub = message_filters.Subscriber("/camera/depth/image_raw", Image)
-        ts = message_filters.TimeSynchronizer([rgb_image_sub,depth_image_sub],10)
-        ts.registerCallback(self.sync_callback)
-    
-    def sync_callback(self,rgb_image_message,depth_image_message):
-        #t=time.time()
-
-        try:
-            rgb_image = self.bridge.imgmsg_to_cv2(rgb_image_message, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-
-        try:
-            depth_image = self.bridge.imgmsg_to_cv2(depth_image_message, "32FC1")
-        except CvBridgeError as e:
-            print(e)
-
-        # Set the dimensions of the image
-        self.dims = rgb_image.shape
-        h = self.dims[0]
-        w = self.dims[1]
-
-        blob = cv2.dnn.blobFromImage(cv2.resize(rgb_image, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
-        self.face_net.setInput(blob)
-        face_detections = self.face_net.forward()
-
-        i = np.argmax(face_detections[0, 0, :, 2])
-        confidence = face_detections[0, 0, i, 2]
-        if confidence>0.5:
-            box = face_detections[0,0,i,3:7] * np.array([w,h,w,h])
-            box = box.astype('int')
-            x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
-
-            cv2.rectangle(rgb_image,(x1,y1),(x2,y2),(0,0,255),2)
-
-            # #Extract region containing face
-            # face_region = rgb_image[y1:y2, x1:x2]
-
-            # face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
-
-
-            # # Get the time that the depth image was recieved
-            # depth_time = depth_image_message.header.stamp
-
-            # # Find the location of the detected face
-            # pose = self.get_pose((x1,x2,y1,y2), face_distance, depth_time)
-
-            # if pose is not None:
-
-            #     # Create a marker used for visualization
-            #     self.marker_num += 1
-            #     marker = Marker()
-            #     marker.header.stamp = rospy.Time(0)
-            #     marker.header.frame_id = 'map'
-            #     marker.pose = pose
-            #     marker.type = Marker.CUBE
-            #     marker.action = Marker.ADD
-            #     marker.frame_locked = False
-            #     marker.lifetime = rospy.Duration.from_sec(10)
-            #     marker.id = self.marker_num
-            #     marker.scale = Vector3(0.1, 0.1, 0.1)
-            #     marker.color = ColorRGBA(0, 1, 0, 1)
-            #     self.marker_array.markers.append(marker)
-
-            #     self.markers_pub.publish(self.marker_array)
-
-        #tf=time.time()-t
-        #average+=tf
-        #num+=num
-        #print('\rcurrent {} hz average {} hz'.format(1/tf,1/(average/num)),sep="")
-        
-        cv2.imshow('ImWindow',rgb_image)
-        cv2.waitKey(1)
-        
-    
-    def find_faces_old(self):
-        print('I got a new image!')
+        #print('I got a new image!')
 
         # Get the next rgb and depth images that are posted from the camera
         try:
@@ -187,6 +151,12 @@ class face_localizer:
 
         try:
             depth_image_message = rospy.wait_for_message("/camera/depth/image_raw", Image)
+        except Exception as e:
+            print(e)
+            return 0
+
+        try:
+            odom:Odometry = rospy.wait_for_message("/odom",Odometry)
         except Exception as e:
             print(e)
             return 0
@@ -230,35 +200,101 @@ class face_localizer:
                 # Extract region containing face
                 face_region = rgb_image[y1:y2, x1:x2]
 
+                # Visualize the extracted face
+                #cv2.imshow("ImWindow", face_region)
+                #cv2.waitKey(1)
+
                 # Find the distance to the detected face
                 face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
 
-                print('Distance to face', face_distance)
+                #print('Distance to face', face_distance)
 
                 # Get the time that the depth image was recieved
                 depth_time = depth_image_message.header.stamp
 
                 # Find the location of the detected face
-                pose = self.get_pose((x1,x2,y1,y2), face_distance, depth_time)
+                #point = self.get_pose((x1,x2,y1,y2), face_distance, depth_time)
 
-                if pose is not None:
+                point1,point2 = self.get_pose_new((x1,x2,y1,y2),depth_image,depth_time)
 
-                    # Create a marker used for visualization
-                    self.marker_num += 1
-                    marker = Marker()
-                    marker.header.stamp = rospy.Time(0)
-                    marker.header.frame_id = 'map'
-                    marker.pose = pose
-                    marker.type = Marker.CUBE
-                    marker.action = Marker.ADD
-                    marker.frame_locked = False
-                    marker.lifetime = rospy.Duration.from_sec(10)
-                    marker.id = self.marker_num
-                    marker.scale = Vector3(0.1, 0.1, 0.1)
-                    marker.color = ColorRGBA(0, 1, 0, 1)
-                    self.marker_array.markers.append(marker)
+                if point1 is not None and point2 is not None:
+                    point = (point1+point2)/2
+                    angle = np.arctan2(point1[0]-point2[0],point1[1]-point2[1])
+                    offset1 = np.array([0.3*np.cos(angle),0.3*np.sin(angle),0])
+                    offset2 = -np.array([0.3*np.cos(angle),0.3*np.sin(angle),0])
+                    position = np.array([odom.pose.pose.position.x,odom.pose.pose.position.y,0])
+                    offset = offset1 if np.linalg.norm(point+offset1-position) <= np.linalg.norm(point+offset2-position) else offset2
 
-                    self.markers_pub.publish(self.marker_array)
+                    d = distance.cdist([point],self.centres[:self.num,:])
+                    if self.num==0 or np.min(d)>0.5:
+                        self.all_points.append([])
+                        self.all_points[self.num].append(point)
+                        self.all_points_offsets.append([])
+                        self.all_points_offsets[self.num].append(offset)
+                        self.centres[self.num,:]=point
+                        self.centres_offsets[self.num,:]=offset
+                        self.num+=1
+                    else:
+                        i = np.argmin(d)
+                        self.all_points[i].append(point)
+                        tp = np.array(self.all_points[i])
+                        self.centres[i,:]=np.mean(tp,axis=0)
+                        self.all_points_offsets[i].append(offset)
+                        tg = np.array(self.all_points_offsets[i])
+                        self.centres_offsets[i,:]=np.mean(tg,axis=0)
+
+        # Create a marker used for visualization
+        marker_array = MarkerArray()
+        face_goal_array = FaceGoalsArray()
+        for i in range(self.num):
+            marker = Marker()
+            marker.header.stamp = rospy.Time(0)
+            marker.header.frame_id = 'map'
+
+            pose = Pose()
+            pose.position.x = self.centres[i,0]
+            pose.position.y = self.centres[i,1]
+            pose.position.z = self.centres[i,2]
+
+            marker.pose = pose
+            marker.type = Marker.TEXT_VIEW_FACING
+            marker.text = "{}".format(len(self.all_points[i]))
+            marker.action = Marker.ADD
+            marker.frame_locked = False
+            marker.lifetime = rospy.Duration.from_sec(10)
+            marker.id = i
+            marker.scale = Vector3(0.5, 0.5, 0.5)
+            marker.color = ColorRGBA(1, 0, 0, 1)
+            marker_array.markers.append(marker)
+
+        for i in range(self.num):
+            marker = Marker()
+            marker.header.stamp = rospy.Time(0)
+            marker.header.frame_id = 'map'
+
+            pose = Pose()
+            pose.position.x = self.centres[i,0] + self.centres_offsets[i,0]
+            pose.position.y = self.centres[i,1] + self.centres_offsets[i,1]
+            pose.position.z = self.centres[i,2] + self.centres_offsets[i,2]
+
+            marker.pose = pose
+            marker.type = Marker.CUBE
+            marker.action = Marker.ADD
+            marker.frame_locked = False
+            marker.lifetime = rospy.Duration.from_sec(10)
+            marker.id = self.num+i
+            marker.scale = Vector3(0.1, 0.1, 0.1)
+            marker.color = ColorRGBA(1, 0, 1, 1)
+            marker_array.markers.append(marker)
+
+            face_goal = FaceGoals()
+            face_goal.coords=(self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
+            norm=-self.centres_offsets[i,:2]/0.3
+            face_goal.coords.extend(norm.tolist())
+            face_goal_array.goals.append(face_goal)
+
+        self.markers_pub.publish(marker_array)
+        self.face_goals_pub.publish(face_goal_array)
 
     def depth_callback(self,data):
 

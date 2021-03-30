@@ -293,8 +293,8 @@ class face_localizer:
 
             face_goal = FaceGoals()
             face_goal.coords=(self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
-            norm=self.centres_offsets[i,:2]/0.3
-            face_goal.coords.extend(norm.tolist())
+            angle=np.arctan2(-self.centres_offsets[i,1],-self.centres_offsets[i,0])
+            face_goal.coords.extend([np.sin(angle/2),np.cos(angle/2)])
             face_goal_array.goals.append(face_goal)
 
         self.markers_pub.publish(marker_array)

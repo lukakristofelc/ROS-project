@@ -27,7 +27,7 @@ class face_localizer:
 
         # The function for performin HOG face detection
         #self.face_detector = dlib.get_frontal_face_detector()
-        self.face_net = cv2.dnn.readNetFromCaffe('/home/krblaz/Documents/RIS/src/exercise4/scripts/deploy.prototxt.txt', '/home/krblaz/Documents/RIS/src/exercise4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
+        self.face_net = cv2.dnn.readNetFromCaffe('/home/krblaz/Documents/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/krblaz/Documents/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
 
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
@@ -194,6 +194,9 @@ class face_localizer:
         self.face_net.setInput(blob)
         face_detections = self.face_net.forward()
 
+        # cv2.imshow("ImgWindow", rgb_image)
+        # cv2.waitKey(1)
+
         for i in range(0, face_detections.shape[2]):
             confidence = face_detections[0, 0, i, 2]
             if confidence>0.5:
@@ -202,11 +205,10 @@ class face_localizer:
                 x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
 
                 # Extract region containing face
+                if not (self.dims[1]>x1>0 and self.dims[1]>x2>0 and self.dims[0]>y1>0 and self.dims[0]>y2>0):
+                    continue
                 face_region = rgb_image[y1:y2, x1:x2]
-
-                # Visualize the extracted face
-                #cv2.imshow("ImWindow", face_region)
-                #cv2.waitKey(1)
+                print("X1:{} X2:{} Y1:{} Y2:{}".format(x1, x2, y1, y2))
 
                 # Find the distance to the detected face
                 face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
@@ -222,6 +224,9 @@ class face_localizer:
                 point1,point2 = self.get_pose_new((x1,x2,y1,y2),depth_image,depth_time)
 
                 if point1 is not None and point2 is not None:
+                    # Visualize the extracted face
+                    cv2.imshow("ImgWindow", face_region)
+                    cv2.waitKey(5)
                     point = (point1+point2)/2
                     vec = point1-point2
                     offset = np.array([1,-vec[0]/vec[1],0])
@@ -231,7 +236,7 @@ class face_localizer:
                     offset = offset1 if np.linalg.norm(point+offset1-position) <= np.linalg.norm(point+offset2-position) else offset2
 
                     d = distance.cdist([point],self.centres[:self.num,:])
-                    if self.num==0 or np.min(d)>0.5:
+                    if self.num==0 or np.min(d)>0.5 or np.linalg.norm(self.centres[np.argmin(d)]+self.centres_offsets[np.argmin(d)] - (offset+point))>0.6:
                         self.all_points.append([])
                         self.all_points[self.num].append(point)
                         self.all_points_offsets.append([])

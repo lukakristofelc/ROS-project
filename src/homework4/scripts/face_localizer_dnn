@@ -223,12 +223,10 @@ class face_localizer:
 
                 if point1 is not None and point2 is not None:
                     point = (point1+point2)/2
-                    vec = point1[:2]-point2[:2]
-                    offset = np.random.rand(2)
-                    offset = offset - vec.dot(vec) * vec
-                    offset = offset / np.linalg.norm(offset) * 0.4
-                    offset1 = np.append(offset,point[2])
-                    offset2 = -np.append(offset,point[2])
+                    vec = point1-point2
+                    offset = np.array([1,-vec[0]/vec[1],0])
+                    offset1 = offset / np.linalg.norm(offset) * 0.4
+                    offset2 = -offset1
                     position = np.array([odom.pose.pose.position.x,odom.pose.pose.position.y,0])
                     offset = offset1 if np.linalg.norm(point+offset1-position) <= np.linalg.norm(point+offset2-position) else offset2
 

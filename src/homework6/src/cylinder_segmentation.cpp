@@ -74,7 +74,7 @@ cloud_cb (const pcl::PCLPointCloud2ConstPtr& cloud_blob)
   seg.setOptimizeCoefficients (true);
   seg.setModelType (pcl::SACMODEL_NORMAL_PLANE);
   seg.setNormalDistanceWeight (0.12);
-  seg.setMethodType (pcl::SAC_RANSAC);
+  seg.setMethodType (pcl::SAC_PROSAC);
   seg.setMaxIterations (100);
   seg.setDistanceThreshold (0.05);
   seg.setInputCloud (cloud_filtered);
@@ -172,15 +172,15 @@ cloud_cb (const pcl::PCLPointCloud2ConstPtr& cloud_blob)
 	       ROS_WARN("Transform warning: %s\n", ex.what());
 	  }
 
-          //std::cerr << tss ;
+        //std::cerr << tss ;
 
-          tf2::doTransform(point_camera, point_map, tss);
+        tf2::doTransform(point_camera, point_map, tss);
 
 	      std::cerr << "point_camera: " << point_camera.point.x << " " <<  point_camera.point.y << " " <<  point_camera.point.z << std::endl;
 
 	      std::cerr << "point_map: " << point_map.point.x << " " <<  point_map.point.y << " " <<  point_map.point.z << std::endl;
 
-        if (0.12 < point_map.point.z && point_map.point.z < 0.28) {
+        if(0.20 < point_map.point.z && point_map.point.z < 0.40) {
           marker.header.frame_id = "map";
           marker.header.stamp = ros::Time::now();
 
@@ -194,24 +194,24 @@ cloud_cb (const pcl::PCLPointCloud2ConstPtr& cloud_blob)
           marker.pose.position.y = point_map.point.y;
           marker.pose.position.z = point_map.point.z;
           marker.pose.orientation.x = 0.0;
-	        marker.pose.orientation.y = 0.0;
+          marker.pose.orientation.y = 0.0;
           marker.pose.orientation.z = 0.0;
           marker.pose.orientation.w = 1.0;
 
           marker.scale.x = 0.1;
-	        marker.scale.y = 0.1;
-	        marker.scale.z = 0.1;
+          marker.scale.y = 0.1;
+          marker.scale.z = 0.1;
 
           marker.color.r=0.0f;
           marker.color.g=1.0f;
           marker.color.b=0.0f;
           marker.color.a=1.0f;
 
-	        marker.lifetime = ros::Duration();
+          marker.lifetime = ros::Duration();
 
-	        pubm.publish (marker);
+          pubm.publish (marker);
 
-	        pcl::PCLPointCloud2 outcloud_cylinder;
+          pcl::PCLPointCloud2 outcloud_cylinder;
           pcl::toPCLPointCloud2 (*cloud_cylinder, outcloud_cylinder);
           puby.publish (outcloud_cylinder);
         }

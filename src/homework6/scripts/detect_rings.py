@@ -107,6 +107,7 @@ class The_Ring:
             print(e)
 
         depth_time = depth_img.header.stamp
+        depth_image = self.bridge.imgmsg_to_cv2(depth_img, "32FC1")
 
         # Set the dimensions of the image
         self.dims = cv_image.shape
@@ -119,7 +120,7 @@ class The_Ring:
 
         # Binarize the image
         #ret, thresh = cv2.threshold(img, 50, 255, 0)
-        ret, thresh = cv2.threshold(img, 50, 255, cv2.THRESH_BINARY)
+        ret, thresh = cv2.threshold(img, 50, 255, cv2.THRESH_OTSU)
 
         # Extract contours
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -136,6 +137,10 @@ class The_Ring:
                 ellipse = cv2.fitEllipse(cnt)
                 elps.append(ellipse)
 
+        #for elp in elps:
+        #    cv2.ellipse(thresh, elp, (0, 0, 255), 2)
+        #cv2.imshow("Image window", thresh)
+        #cv2.waitKey(1)
 
         # Find two elipses with same centers
         candidates = []
@@ -166,17 +171,21 @@ class The_Ring:
 
             cv2.ellipse(fil_inner, e2, (255, 255, 255), -1)
 
-            cv2.ellipse(cv_image, e1, (0, 255, 0), 2)
-            cv2.ellipse(cv_image, e2, (0, 255, 0), 2)
+            ring = depth_image[fil_ring.astype(bool)]
+            inner = depth_image[fil_inner.astype(bool)]
 
-            depth_image = self.bridge.imgmsg_to_cv2(depth_img, "32FC1")
-            depth_ring = float(np.nanmean(depth_image[fil_ring.astype(bool)]))
-            depth_inner = float(np.nanmean(depth_image[fil_inner.astype(bool)]))
+            depth_ring = float(np.nanmean(ring))
+            depth_inner = float(np.nanmean(inner))
 
-            nan_ring = np.count_nonzero(~np.isnan(depth_image[fil_ring.astype(bool)]))
-            nan_inner = np.count_nonzero(~np.isnan(depth_image[fil_inner.astype(bool)]))
+            nan_ring = np.count_nonzero(np.isnan(ring))
+            nan_inner = np.count_nonzero(np.isnan(inner))
 
-            print(depth_ring - depth_inner, nan_ring, nan_inner)
+            cv2.ellipse(cv_image, e1, (0, 0, 255), 2)
+            cv2.ellipse(cv_image, e2, (0, 0, 255), 2)
+            text = "{:.4f} {:.0f} {:.0f}".format(depth_ring - depth_inner, nan_ring/ring.size * 100, nan_inner/inner.size * 100)
+            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+            pos = (int(e1[0][0] - text_size[0][0]/2), int(e1[0][1] + (e1[1][0]+e1[1][1])/4* 1.8))
+            cv2.putText(cv_image, text, pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
             point = self.get_pose(e1, depth_ring, depth_time)
 
@@ -215,7 +224,7 @@ class The_Ring:
 
         self.markers_pub.publish(marker_array)
 
-        cv2.imshow("Image window",fil_ring)
+        cv2.imshow("Image window",cv_image)
         cv2.waitKey(1)
 
     def depth_callback(self,data):
@@ -231,8 +240,8 @@ class The_Ring:
 
         image_viz = np.array(image_1, dtype= np.uint8)
 
-        cv2.imshow("Depth window", image_viz)
-        cv2.waitKey(1)
+        #cv2.imshow("Depth window", image_viz)
+        #cv2.waitKey(1)
 
 
 def main():

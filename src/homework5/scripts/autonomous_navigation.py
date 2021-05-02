@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import rospy
 import numpy as np
 import cv2
@@ -139,7 +141,11 @@ def navigate(transformedPoints: np.array):
     #    drawMarkers(transformedPoints)
     #    rate.sleep()
     
-    for goal_point in transformedPoints:
+    ring_num = 0
+    cylinder_num = 0
+
+    while len(transformedPoints) > 0:
+        goal_point = transformedPoints.pop(0)
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.pose.position.x = goal_point[0]
@@ -152,6 +158,29 @@ def navigate(transformedPoints: np.array):
         while action_client.get_state() in [0,1]:
             time.sleep(1)
 
+        goal.target_pose.pose.orientation.z = 1
+        goal.target_pose.pose.orientation.w = 0
+        goal.target_pose.header.stamp = rospy.Time.now()
+
+        action_client.send_goal(goal)
+
+        while action_client.get_state() in [0,1]:
+            ring_markers:MarkerArray = rospy.wait_for_message("ring_markers", MarkerArray)
+            cylinder_markers:MarkerArray = rospy.wait_for_message("cylinder_markers", MarkerArray)
+
+            if len(ring_markers)>ring_num:
+                ring_goals = = ring_markers[ring_num:]
+                for ring_goal in ring_goals:
+                    transformedPoints.insert(0, [ring_goal.pose.position.x, ring_goal.pose.position.y])
+                ring_num=len(ring_goals)
+
+            if len(cylinder_markers)>cylinder_num:
+                cylinder_goals = = cylinder_markers[cylinder_num:]
+                for cylinder_goal in cylinder_goals:
+                    transformedPoints.insert(0, [cylinder_goal.pose.position.x, cylinder_goal.pose.position.y])
+                cylinder_num=len(cylinder_goals)
+            time.sleep(1)
+        
 
 def showCentresImage(ros_map_data: np.array, centres: np.array):
     for i,centre in enumerate(centres):

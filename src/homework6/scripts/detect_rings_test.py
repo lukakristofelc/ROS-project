@@ -12,6 +12,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 from scipy.spatial import distance
+import message_filters
 
 
 class The_Ring:
@@ -25,7 +26,10 @@ class The_Ring:
         self.dims = (0, 0, 0)
 
         # Subscribe to the image and/or depth topic
-        self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
+        self.image_sub = message_filters.Subscriber("/camera/rgb/image_raw", Image)
+        self.depth_sub = message_filters.Subscriber('/camera/depth/image_raw', Image)
+        self.ts = message_filters.TimeSynchronizer([self.image_sub,self.depth_sub],1000)
+        self.ts.registerCallback(self.image_callback)
         # self.depth_sub = rospy.Subscriber("/camera/depth_registered/image_raw", Image, self.depth_callback)
 
         # Publiser for the visualization markers
@@ -93,17 +97,12 @@ class The_Ring:
         # self.markers_pub.publish(self.marker_array)
 
 
-    def image_callback(self,data):
+    def image_callback(self,data, depth_img):
         #print('I got a new image!')
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
-            print(e)
-
-        try:
-            depth_img = rospy.wait_for_message('/camera/depth/image_raw', Image)
-        except Exception as e:
             print(e)
 
         depth_time = depth_img.header.stamp
@@ -229,7 +228,7 @@ class The_Ring:
 
         self.markers_pub.publish(marker_array)
 
-        cv2.imshow("Image window",thresh)
+        cv2.imshow("Image window",cv_image)
         cv2.waitKey(1)
 
     def depth_callback(self,data):

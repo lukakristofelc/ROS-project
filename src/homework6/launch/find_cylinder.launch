@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node pkg="exercise6" type="cylinder_segmentation" name="cylinder_segmentation">
+        <remap from="input" to="/camera/depth/points"/>
+    </node>
+    <node pkg="homework6" type="cylinder_markers.py" name="cylinder_markers"/>
+
+</launch>

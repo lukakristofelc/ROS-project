@@ -58,13 +58,13 @@ class CylinderMarkers:
             marker.header.frame_id = 'map'
             marker.pose = pose
             marker.type = Marker.TEXT_VIEW_FACING
-            marker.text = "{}".format(len(self.all_points[i]))
+            marker.text = "C{}".format(len(self.all_points[i]))
             marker.action = Marker.ADD
             marker.frame_locked = False
             marker.lifetime = rospy.Duration.from_sec(2)
             marker.id = i
             marker.scale = Vector3(0.5, 0.5, 0.5)
-            marker.color = ColorRGBA(0, 1, 0, 1)
+            marker.color = ColorRGBA(self.color_centres[i][0]/255, self.color_centres[i][1]/255, self.color_centres[i][2]/255, 1)
             marker_array.markers.append(marker)
         self.markers_pub.publish(marker_array)
 

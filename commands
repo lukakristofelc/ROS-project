@@ -1,5 +1,5 @@
 roslaunch homework6 start_simulation.launch 
-roslaunch exercise6 find_cylinder.launch 
+roslaunch homework6 find_cylinder.launch 
 
 
 roslaunch exercise3 rins_world.launch

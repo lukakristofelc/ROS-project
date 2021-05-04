@@ -4,15 +4,32 @@ project(homework6)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
+find_package(Boost REQUIRED COMPONENTS system filesystem thread)
+find_package(Eigen3 REQUIRED)
+find_package(PCL REQUIRED)
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
   rospy
-  std_msgs
   message_generation
+  dynamic_reconfigure
+  genmsg
+  nodelet
+  nodelet_topic_tools
+  pcl_conversions
+  pcl_msgs
+  pluginlib
+  rosbag
+  rosconsole
+  roscpp
+  roslib
+  sensor_msgs
+  std_msgs
   geometry_msgs
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -119,8 +136,18 @@ CATKIN_DEPENDS message_runtime
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+	${Boost_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
+  ${Eigen_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+)
+
+## Add link directories
+link_directories(
+  ${Boost_LIBRARY_DIRS}
+  ${Eigen_LIBRARY_DIRS}
+  ${PCL_LIBRARY_DIRS}
+  ${catkin_LIBRARY_DIRS}
 )
 
 ## Declare a C++ library
@@ -149,9 +176,7 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+link_libraries(${Boost_LIBRARIES} ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 #############
 ## Install ##
@@ -207,3 +232,5 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable (cylinder_segmentation src/cylinder_segmentation.cpp)

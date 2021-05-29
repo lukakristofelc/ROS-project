@@ -2,7 +2,9 @@
 
 import sys
 import rospy
-import dlib
+from tensorflow.keras.models import load_model
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+from tensorflow.keras.preprocessing.image import img_to_array
 import cv2
 import numpy as np
 import tf2_geometry_msgs
@@ -27,8 +29,8 @@ class face_localizer:
 
         # The function for performin HOG face detection
         #self.face_detector = dlib.get_frontal_face_detector()
-        self.face_net = cv2.dnn.readNetFromCaffe('/home/krblaz/Documents/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/krblaz/Documents/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
-
+        self.face_net = cv2.dnn.readNetFromCaffe('/home/luka/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/luka/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
+        self.mask_net = load_model("/home/luka/RIS/src/homework4/scripts/mask_detector.model")
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
@@ -191,6 +193,7 @@ class face_localizer:
         # Detect the faces in the image
         #face_rectangles = self.face_detector(rgb_image, 0)
         blob = cv2.dnn.blobFromImage(cv2.resize(rgb_image, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
+        print(blob.shape)
         self.face_net.setInput(blob)
         face_detections = self.face_net.forward()
 
@@ -209,6 +212,17 @@ class face_localizer:
                     continue
                 face_region = rgb_image[y1:y2, x1:x2]
                 print("X1:{} X2:{} Y1:{} Y2:{}".format(x1, x2, y1, y2))
+
+                # Detect mask
+                face = cv2.cvtColor(face_region, cv2.COLOR_BGR2RGB)
+                face = cv2.resize(face, (224, 224))
+                face = img_to_array(face)
+                face = preprocess_input(face)
+                face = np.array(face, dtype="float32")
+                face = np.expand_dims(face, axis = 0)
+
+                mask = self.mask_net.predict(face, batch_size=32)
+                print(mask)
 
                 # Find the distance to the detected face
                 face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))

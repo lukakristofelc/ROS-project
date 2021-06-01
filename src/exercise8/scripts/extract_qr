@@ -13,6 +13,11 @@ from std_msgs.msg import ColorRGBA
 import pyzbar.pyzbar as pyzbar
 
 from urllib.request import urlopen
+#Data manipulation
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.neighbors import KNeighborsClassifier
+import pandas as pd
 
 
 dictm = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
@@ -45,7 +50,11 @@ class QRExtractor:
         self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
 
     def image_callback(self,data):
-        # print('Iam here!')
+        # Scaler
+        #scaler = MinMaxScaler()
+
+        # KNN classifier
+        knn = KNeighborsClassifier(n_neighbors=9) #9 je kr dobr, pa 7 tudi
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
@@ -66,7 +75,29 @@ class QRExtractor:
             f = urlopen(data)
             myfile = f.read()
             dataURL = (myfile.decode("utf-8")).splitlines()
-            print("Data from URL: ", dataURL[1],'\n')
+            array = []
+            for d in dataURL:
+                array.append(d.split(','))
+
+            if len(dataURL)>1:
+                #print("Data from URL: ", dataURL[1],'\n')
+                age = 100.0
+                exercise = 40.0
+                dataFrame = pd.DataFrame(array, columns=['age', 'exerciseHours', 'vaccine'])
+                #print(dataFrame)
+                feature_names = ['age', 'exerciseHours']
+                X = dataFrame[feature_names]
+                y = dataFrame['vaccine']
+                #X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
+                #X_train = scaler.fit_transform(X)
+                #X_test = scaler.transform([[19.19, 22.04]])
+                knn.fit(X, y)
+                #print('Accuracy of K-NN classifier on training set: {:.2f}'.format(knn.score(X_train, y_train)))
+                #print('Accuracy of K-NN classifier on test set: {:.2f}'.format(knn.score(X_test, y_test)))
+                # Predict the right vaccine
+                vaccine = knn.predict([[age, exercise]])
+                print(vaccine[0])
+
             
             # Visualize the detected QR code in the image
             points  = dObject.polygon

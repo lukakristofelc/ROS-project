@@ -222,8 +222,11 @@ class face_localizer:
                 face = np.expand_dims(face, axis = 0)
 
                 mask = self.mask_net.predict(face, batch_size=32)
-                print(mask)
-
+                mask = mask[0]
+                wearing_mask = True
+                if mask[0] < mask[1]:
+                    wearing_mask = False
+                
                 # Find the distance to the detected face
                 face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
 
@@ -312,11 +315,12 @@ class face_localizer:
             marker_array.markers.append(marker)
 
             face_goal = FaceGoals()
-            face_goal.coords=(self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
+            face_goal.coords = (self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
             angle=np.arctan2(-self.centres_offsets[i,1],-self.centres_offsets[i,0])
             face_goal.coords.extend([np.sin(angle/2),np.cos(angle/2)])
+            face_goal.wearing_mask = wearing_mask
             face_goal_array.goals.append(face_goal)
-
+            
         self.markers_pub.publish(marker_array)
         self.face_goals_pub.publish(face_goal_array)
 

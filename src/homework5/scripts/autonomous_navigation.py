@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 import rospy
 import numpy as np
@@ -15,6 +15,7 @@ from std_msgs.msg import ColorRGBA
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from python_tsp.exact import solve_tsp_dynamic_programming
 from std_msgs.msg import String
+from homework4.msg import FaceGoals, FaceGoalsArray
 from sound_play.libsoundplay import SoundClient
 
 map_valus={-1:0,0:255,100:0}
@@ -23,6 +24,7 @@ elements = np.array(elements)
 ring_num = 0
 cylinder_num = 0
 attackedHumans = []
+face_goals_num = 0
 
 colors = {'red': (35.00,24.00,11.00),
           'green': (54.92,-38.11,31.68),
@@ -224,26 +226,43 @@ def navigate():
     #while not rospy.is_shutdown():
     #    drawMarkers(transformedPoints)
     #    rate.sleep()
+
+    
     
     while transformedPoints.size > 0:
+        #humansTooClose = tooClose() 
+
+        #if humansTooClose != None & humansTooClose not in attackedHumans:
+        #    attackHumans(humansTooClose, action_client, soundhandle)
+        #    attackedHumans.insert(humansTooClose)
+
         goal_point = transformedPoints[0,:]
         transformedPoints = transformedPoints[1:,:]
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
 
-        humansTooClose = tooClose() 
+        if goal_point[2] == 3:
+            
 
-        if humansTooClose != None & humansTooClose not in attackedHumans:
-            attackHumans(humansTooClose, action_client, soundhandle)
-            attackedHumans.insert(humansTooClose)
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = faceOrientation[0, 0]
+            goal.target_pose.pose.orientation.w = faceOrientation[0, 1]
+            goal.target_pose.header.stamp = rospy.Time.now()
+            faceOrientation = faceOrientation[1:, :]
 
-        if goal_point[2] == 2:
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+        elif goal_point[2] == 2:
             c = classifyColor()
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
             goal.target_pose.pose.orientation.z = cylinderOrientation[0, 0]
             goal.target_pose.pose.orientation.w = cylinderOrientation[0, 1]
             goal.target_pose.header.stamp = rospy.Time.now()
+            cylinderOrientation = cylinderOrientation[1:, :]
 
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
@@ -254,8 +273,6 @@ def navigate():
             pub_arm.publish("extend")
             time.sleep(3)
             pub_arm.publish("retract")
-
-            cylinderOrientation = cylinderOrientation[1:, :]
 
         elif goal_point[2] == 1:
             c = classifyColor()
@@ -368,6 +385,18 @@ def cylinderMarkersCallback(cylinder_markers: MarkerArray):
             markerColor = [cylinder_goal.color] + markerColor
         cylinder_num = len(cylinder_markers.markers)
 
+def faceGoalsCallback(face_goals_array: FaceGoalsArray):
+    global face_goals_num
+    global transformedPoints
+    global faceOrientation
+    if len(face_goals_array.goals) > face_goals_num:
+        face_goals = face_goals_array.goals[face_goals_num:]
+        for face_goal in face_goals:
+            transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
+            faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
+        face_goals_num = len(face_goals_array.goals)
+
+
 def rgb2lab(inputColor):
     num = 0
     RGB = [0, 0, 0]
@@ -425,12 +454,14 @@ if __name__ == "__main__":
     rospy.init_node("autonomous_navigation")
     ros_map = rospy.wait_for_message("map",OccupancyGrid)
 
-    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
-    rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     centres: np.array = getPoints(ros_map)
     transformedPoints = transformCoordinates(ros_map, centres)
     cylinderOrientation = np.empty(shape=(0,2))
+    faceOrientation = np.empty(shape=(0,2))
     markerColor = []
+    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
+    rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
+    rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
     navigate()
 
     #rate = rospy.Rate(1)

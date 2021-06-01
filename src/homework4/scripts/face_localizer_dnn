@@ -11,7 +11,7 @@ import tf2_geometry_msgs
 import tf2_ros
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, Vector3, Pose
+from geometry_msgs.msg import PointStamped, Vector3, Pose, PoseWithCovarianceStamped
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
@@ -30,8 +30,8 @@ class face_localizer:
 
         # The function for performin HOG face detection
         #self.face_detector = dlib.get_frontal_face_detector()
-        self.face_net = cv2.dnn.readNetFromCaffe('/home/luka/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/luka/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
-        self.mask_net = load_model("/home/luka/RIS/src/homework4/scripts/mask_detector.model")
+        self.face_net = cv2.dnn.readNetFromCaffe('/home/krblaz/Documents/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/krblaz/Documents/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
+        self.mask_net = load_model("/home/krblaz/Documents/RIS/src/homework4/scripts/mask_detector.model")
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
@@ -164,7 +164,7 @@ class face_localizer:
             return 0
 
         try:
-            odom:Odometry = rospy.wait_for_message("/odom",Odometry)
+            amcl_pose:PoseWithCovarianceStamped = rospy.wait_for_message("/amcl_pose",PoseWithCovarianceStamped)
         except Exception as e:
             print(e)
             return 0
@@ -251,7 +251,7 @@ class face_localizer:
                     offset = np.array([1,-vec[0]/vec[1],0])
                     offset1 = offset / np.linalg.norm(offset) * 0.4
                     offset2 = -offset1
-                    position = np.array([odom.pose.pose.position.x,odom.pose.pose.position.y,0])
+                    position = np.array([amcl_pose.pose.pose.position.x,amcl_pose.pose.pose.position.y,0])
                     offset = offset1 if np.linalg.norm(point+offset1-position) <= np.linalg.norm(point+offset2-position) else offset2
 
                     d = distance.cdist([point],self.centres[:self.num,:])

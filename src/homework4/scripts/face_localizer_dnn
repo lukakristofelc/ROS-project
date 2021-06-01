@@ -19,6 +19,7 @@ from scipy.spatial import distance
 from nav_msgs.msg import Odometry
 from homework4.msg import FaceGoals,FaceGoalsArray
 
+wearing_mask = True
 
 class face_localizer:
     def __init__(self):
@@ -146,6 +147,7 @@ class face_localizer:
     
 
     def find_faces(self):
+        global wearing_mask
         #print('I got a new image!')
 
         # Get the next rgb and depth images that are posted from the camera
@@ -345,7 +347,6 @@ class face_localizer:
         #plt.show()
 
 def main():
-
         face_finder = face_localizer()
 
         rate = rospy.Rate(1)

@@ -14,10 +14,36 @@ from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from python_tsp.exact import solve_tsp_dynamic_programming
+from std_msgs.msg import String
+from sound_play.libsoundplay import SoundClient
 
 map_valus={-1:0,0:255,100:0}
 elements = [[[1,0,1],[0,1,0],[0,1,0]],[[0,1,0],[0,1,1],[1,0,0]],[[0,0,1],[1,1,0],[0,0,1]],[[1,0,0],[0,1,1],[0,1,0]],[[0,1,0],[0,1,0],[1,0,1]],[[0,0,1],[1,1,0],[0,1,0]],[[1,0,0],[0,1,1],[1,0,0]],[[0,1,0],[1,1,0],[0,0,1]],[[1,0,0],[0,1,0],[1,0,1]],[[1,0,1],[0,1,0],[1,0,0]],[[1,0,1],[0,1,0],[0,0,1]],[[0,0,1],[0,1,0],[1,0,1]]]
 elements = np.array(elements)
+ring_num = 0
+cylinder_num = 0
+attackedHumans = []
+
+colors = {'red': (35.00,24.00,11.00),
+          'green': (54.92,-38.11,31.68),
+          'blue': (21.00,0.00,-30.00),
+          'yellow': (38.96,-7.16,27.26),
+          'orange': (67.62,45.96,74.74),
+          'white': (100.00,0.00,0.00),
+          'black': (20.00,0.00,0.00),
+          'purple': (39.21,74.61,-95.66)}
+
+
+def colorDistance(left, right):
+    return sum((l-r)**2 for l, r in zip(left, right))**0.5
+
+
+class NearestColorKey(object):
+    def __init__(self, goal):
+        self.goal = goal
+    def __call__(self, item):
+        return colorDistance(self.goal, item[1])
+
 
 def getPoints(map_map: OccupancyGrid):
     ros_map_data = map_map.data  
@@ -86,7 +112,7 @@ def transformCoordinates(ros_map: OccupancyGrid, centres: np.array):
         point.point.y = centre[1] * ros_map.info.resolution
         point.point.z = 0
         transformedPoint = tf2_geometry_msgs.do_transform_point(point,map_transform)
-        transformedPoints.append([transformedPoint.point.x,transformedPoint.point.y])
+        transformedPoints.append([transformedPoint.point.x,transformedPoint.point.y,0])
     return np.array(transformedPoints)
 
 def findDistance(start_point: np.array, end_point: np.array):
@@ -124,13 +150,71 @@ def findShortestPath(transformedPoints: np.array):
     permutation, distance = solve_tsp_dynamic_programming(distance_matrix)
     return permutation
 
+def tooClose():
+    global transformedPoints
+    global attackedHumans
 
-def navigate(transformedPoints: np.array):
+    humanGoals = []
+
+    for point in transformedPoints:
+        if point[2] == 3:
+            humanGoals.insert(point)
+    
+    for i, humanGoal in enumerate(humanGoals):
+        for other in humanGoals[i:]:
+            distance = findDistance(humanGoal, other)
+
+            if distance < 2 & [humanGoal, other] not in attackedHumans:
+                return [humanGoal, other]
+    
+    return None
+
+def attackHumans(humans, action_client, soundhandle):
+    halfwayGoal = getHalfwayGoal(humans)
+
+    action_client.send_goal(halfwayGoal)
+    
+    while action_client.get_state() in [0,1]:
+        time.sleep(1)
+
+    soundhandle.say("Danger! Please move further apart.")
+
+def getHalfwayGoal(start_point, end_point):
+    rospy.wait_for_service("move_base/make_plan")
+    get_plan = rospy.ServiceProxy('move_base/make_plan', GetPlan)
+    
+    start = PoseStamped()
+    start.header.seq = 0
+    start.header.frame_id = "map"
+    start.header.stamp = rospy.Time(0)
+    start.pose.position.x = start_point[0]
+    start.pose.position.y = start_point[1]
+
+    goal = PoseStamped()
+    goal.header.seq = 0
+    goal.header.frame_id = "map"
+    goal.header.stamp = rospy.Time(0)
+    goal.pose.position.x = end_point[0]
+    goal.pose.position.y = end_point[1]
+
+    path: GetPlanResponse = get_plan(start, goal, .5)
+    path = list(map(lambda point : [point.pose.position.x,point.pose.position.y], path.plan.poses))
+    return path[int(len(path) / 2)]
+    
+
+def navigate():
+    global transformedPoints
+    global cylinderOrientation
+    global attackedHumans
+
+    soundhandle = SoundClient()
+
+    pub_arm = rospy.Publisher('arm_command', String)
     odom: Odometry = rospy.wait_for_message("/odom", Odometry)
     action_client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
     action_client.wait_for_server()
 
-    position = [odom.pose.pose.position.x, odom.pose.pose.position.y]
+    position = [odom.pose.pose.position.x, odom.pose.pose.position.y, 0]
     transformedPoints = np.insert(transformedPoints,0,[position],axis=0)
     transformedPoints = transformedPoints[findShortestPath(transformedPoints)]
     transformedPoints = transformedPoints[1:,:]
@@ -141,46 +225,77 @@ def navigate(transformedPoints: np.array):
     #    drawMarkers(transformedPoints)
     #    rate.sleep()
     
-    ring_num = 0
-    cylinder_num = 0
-
-    while len(transformedPoints) > 0:
-        goal_point = transformedPoints.pop(0)
+    while transformedPoints.size > 0:
+        goal_point = transformedPoints[0,:]
+        transformedPoints = transformedPoints[1:,:]
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
-        goal.target_pose.pose.position.x = goal_point[0]
-        goal.target_pose.pose.position.y = goal_point[1]
-        goal.target_pose.pose.orientation.z = 0
-        goal.target_pose.pose.orientation.w = 1
-        goal.target_pose.header.stamp = rospy.Time.now()
 
-        action_client.send_goal(goal)
-        while action_client.get_state() in [0,1]:
-            time.sleep(1)
+        humansTooClose = tooClose() 
 
-        goal.target_pose.pose.orientation.z = 1
-        goal.target_pose.pose.orientation.w = 0
-        goal.target_pose.header.stamp = rospy.Time.now()
+        if humansTooClose != None & humansTooClose not in attackedHumans:
+            attackHumans(humansTooClose, action_client, soundhandle)
+            attackedHumans.insert(humansTooClose)
 
-        action_client.send_goal(goal)
+        if goal_point[2] == 2:
+            c = classifyColor()
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = cylinderOrientation[0, 0]
+            goal.target_pose.pose.orientation.w = cylinderOrientation[0, 1]
+            goal.target_pose.header.stamp = rospy.Time.now()
 
-        while action_client.get_state() in [0,1]:
-            ring_markers:MarkerArray = rospy.wait_for_message("ring_markers", MarkerArray)
-            cylinder_markers:MarkerArray = rospy.wait_for_message("cylinder_markers", MarkerArray)
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
 
-            if len(ring_markers)>ring_num:
-                ring_goals = = ring_markers[ring_num:]
-                for ring_goal in ring_goals:
-                    transformedPoints.insert(0, [ring_goal.pose.position.x, ring_goal.pose.position.y])
-                ring_num=len(ring_goals)
+            soundhandle.say(c)
 
-            if len(cylinder_markers)>cylinder_num:
-                cylinder_goals = = cylinder_markers[cylinder_num:]
-                for cylinder_goal in cylinder_goals:
-                    transformedPoints.insert(0, [cylinder_goal.pose.position.x, cylinder_goal.pose.position.y])
-                cylinder_num=len(cylinder_goals)
-            time.sleep(1)
-        
+            pub_arm.publish("extend")
+            time.sleep(3)
+            pub_arm.publish("retract")
+
+            cylinderOrientation = cylinderOrientation[1:, :]
+
+        elif goal_point[2] == 1:
+            c = classifyColor()
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = 0.1
+            goal.target_pose.pose.orientation.w = 0.1
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+            soundhandle.say(c)
+
+        else:
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = 1
+            goal.target_pose.pose.orientation.w = 0
+            # goal.target_pose.pose.orientation.z = 0.95
+            # goal.target_pose.pose.orientation.w = 0.29
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+            goal.target_pose.pose.orientation.z = 0
+            goal.target_pose.pose.orientation.w = 1
+            # goal.target_pose.pose.orientation.z = -0.32
+            # goal.target_pose.pose.orientation.w = 0.95
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+        # transformedPoints = transformedPoints[findShortestPath(transformedPoints)]
+
 
 def showCentresImage(ros_map_data: np.array, centres: np.array):
     for i,centre in enumerate(centres):
@@ -189,6 +304,7 @@ def showCentresImage(ros_map_data: np.array, centres: np.array):
 
     cv2.imshow("Intersections",ros_map)
     cv2.waitKey(0)
+
 
 def drawMarkers(transformedPoints: np.array):
     pub = rospy.Publisher('prospective_goals', MarkerArray, queue_size=1000)
@@ -215,15 +331,109 @@ def drawMarkers(transformedPoints: np.array):
         marker_array.markers.append(marker)
     pub.publish(marker_array)
 
+
+def classifyColor():
+    global markerColor
+    rgb = [markerColor[0].r*255, markerColor[0].g*255, markerColor[0].b*255]
+    cylinderColor = rgb2lab(rgb)
+    print(cylinderColor)
+    color = min(colors.items(), key=NearestColorKey(cylinderColor))
+    print(color)
+    markerColor = markerColor[1:]
+    return color[0]
+
+
+def ringMarkersCallback(ring_markers: MarkerArray):
+    global ring_num
+    global transformedPoints
+    global markerColor
+    if len(ring_markers.markers) > ring_num:
+        ring_goals = ring_markers.markers[ring_num:]
+        for ring_goal in ring_goals:
+            transformedPoints = np.insert(transformedPoints, 0, [ring_goal.pose.position.x, ring_goal.pose.position.y, 1], axis=0)
+            markerColor = [ring_goal.color] + markerColor
+        ring_num=len(ring_markers.markers)
+
+
+def cylinderMarkersCallback(cylinder_markers: MarkerArray):
+    global cylinder_num
+    global transformedPoints
+    global cylinderOrientation
+    global markerColor
+    if len(cylinder_markers.markers) > cylinder_num:
+        cylinder_goals = cylinder_markers.markers[cylinder_num:]
+        for cylinder_goal in cylinder_goals:
+            transformedPoints = np.insert(transformedPoints, 0, [cylinder_goal.pose.position.x, cylinder_goal.pose.position.y, 2], axis=0)
+            cylinderOrientation = np.insert(cylinderOrientation, 0, [cylinder_goal.pose.orientation.z, cylinder_goal.pose.orientation.w], axis=0)
+            markerColor = [cylinder_goal.color] + markerColor
+        cylinder_num = len(cylinder_markers.markers)
+
+def rgb2lab(inputColor):
+    num = 0
+    RGB = [0, 0, 0]
+
+    for value in inputColor:
+        value = float(value) / 255
+
+        if value > 0.04045:
+            value = ((value + 0.055) / 1.055) ** 2.4
+        else:
+            value = value / 12.92
+
+        RGB[num] = value * 100
+        num = num + 1
+
+    XYZ = [0, 0, 0, ]
+
+    X = RGB[0] * 0.4124 + RGB[1] * 0.3576 + RGB[2] * 0.1805
+    Y = RGB[0] * 0.2126 + RGB[1] * 0.7152 + RGB[2] * 0.0722
+    Z = RGB[0] * 0.0193 + RGB[1] * 0.1192 + RGB[2] * 0.9505
+    XYZ[0] = round(X, 4)
+    XYZ[1] = round(Y, 4)
+    XYZ[2] = round(Z, 4)
+
+    # Observer= 2°, Illuminant= D65
+    XYZ[0] = float(XYZ[0]) / 95.047         # ref_X =  95.047
+    XYZ[1] = float(XYZ[1]) / 100.0          # ref_Y = 100.000
+    XYZ[2] = float(XYZ[2]) / 108.883        # ref_Z = 108.883
+
+    num = 0
+    for value in XYZ:
+
+        if value > 0.008856:
+            value = value ** (0.3333333333333333)
+        else:
+            value = (7.787 * value) + (16 / 116)
+
+        XYZ[num] = value
+        num = num + 1
+
+    Lab = [0, 0, 0]
+
+    L = (116 * XYZ[1]) - 16
+    a = 500 * (XYZ[0] - XYZ[1])
+    b = 200 * (XYZ[1] - XYZ[2])
+
+    Lab[0] = round(L, 4)
+    Lab[1] = round(a, 4)
+    Lab[2] = round(b, 4)
+
+    return Lab
+
+
 if __name__ == "__main__":
     rospy.init_node("autonomous_navigation")
     ros_map = rospy.wait_for_message("map",OccupancyGrid)
+
+    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
+    rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     centres: np.array = getPoints(ros_map)
     transformedPoints = transformCoordinates(ros_map, centres)
-    navigate(transformedPoints)
+    cylinderOrientation = np.empty(shape=(0,2))
+    markerColor = []
+    navigate()
 
     #rate = rospy.Rate(1)
     #while not rospy.is_shutdown():
     #    drawMarkers(transformedPoints[np.argsort(distances)])
     #    rate.sleep()
-

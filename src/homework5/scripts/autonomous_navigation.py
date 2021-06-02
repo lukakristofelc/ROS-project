@@ -268,7 +268,7 @@ def navigate():
                 time.sleep(1)
 
             for i in faceData:
-                if (i.x == goal_point[0]) & (i.y == goal_point[4]) & (i.mask == False):
+                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]) & (i["mask"] == False):
                     soundhandle.say("Put on mask.")
 
         elif goal_point[2] == 2:
@@ -412,7 +412,7 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            faceData.insert({'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
+            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
         face_goals_num = len(face_goals_array.goals)
 
 

@@ -29,7 +29,7 @@ class face_localizer:
         # The function for performin HOG face detection
         #self.face_detector = dlib.get_frontal_face_detector()
         self.face_net = cv2.dnn.readNetFromCaffe('/home/luka/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/luka/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
-        self.mask_net = load_model("/home/luka/RIS/src/homework4/scripts/mask_detector.model")
+        self.mask_net = load_model("/home/luka/RIS/src/homework4/scripts/Xception-size-64-bs-32-lr-0.0001.h5")
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
@@ -123,7 +123,7 @@ class face_localizer:
         #point_s.point.y = y
         #point_s.point.z = 0.3
         #point_s.header.frame_id = "base_link"
-        #point_s.header.stamp = rospy.Time(0)
+        #point_setInput.header.stamp = rospy.Time(0)
 
         # Define a stamped message for transformation - in the "camera rgb frame"
         point_s = PointStamped()
@@ -216,16 +216,17 @@ class face_localizer:
 
                 # Detect mask
                 face = cv2.cvtColor(face_region, cv2.COLOR_BGR2RGB)
-                face = cv2.resize(face, (224, 224))
+                face = cv2.resize(face, (64, 64))
                 face = img_to_array(face)
                 face = preprocess_input(face)
-                face = np.array(face, dtype="float32")
                 face = np.expand_dims(face, axis = 0)
 
+                cv2.imshow("mask", face_region)
+                cv2.waitKey(1)
+
                 mask = self.mask_net.predict(face, batch_size=32)
-                mask = mask[0]
                 is_wearing_mask = True
-                if mask[0] < mask[1]:
+                if mask > 0.9:
                     is_wearing_mask = False
                 
                 # Find the distance to the detected face

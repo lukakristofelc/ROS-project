@@ -39,7 +39,6 @@ colors = {'red': (35.00,24.00,11.00),
 def colorDistance(left, right):
     return sum((l-r)**2 for l, r in zip(left, right))**0.5
 
-
 class NearestColorKey(object):
     def __init__(self, goal):
         self.goal = goal
@@ -160,28 +159,25 @@ def tooClose():
 
     for point in transformedPoints:
         if point[2] == 3:
-            humanGoals.insert(point)
-    
+            humanGoals.insert(0,point)
+
     for i, humanGoal in enumerate(humanGoals):
-        for other in humanGoals[i:]:
+        for other in humanGoals[i+1:]:
             distance = findDistance(humanGoal, other)
 
-            if distance < 2 & [humanGoal, other] not in attackedHumans:
+            attack = True
+
+            for i in attackedHumans:
+                    if i[0] == humanGoal[0] and i[1] == humanGoal[1] or i[0] == other[0] and i[1] == other[1]:
+                        attack = False
+
+            if (distance < 2) & attack:
                 return [humanGoal, other]
     
     return None
-
-def attackHumans(humans, action_client, soundhandle):
-    halfwayGoal = getHalfwayGoal(humans)
-
-    action_client.send_goal(halfwayGoal)
     
-    while action_client.get_state() in [0,1]:
-        time.sleep(1)
 
-    soundhandle.say("Danger! Please move further apart.")
-
-def getHalfwayGoal(start_point, end_point):
+def getHalfwayPoint(start_point, end_point):
     rospy.wait_for_service("move_base/make_plan")
     get_plan = rospy.ServiceProxy('move_base/make_plan', GetPlan)
     
@@ -209,6 +205,7 @@ def navigate():
     global cylinderOrientation
     global faceOrientation
     global attackedHumans
+    global faceData
 
     soundhandle = SoundClient()
 
@@ -227,23 +224,37 @@ def navigate():
     #while not rospy.is_shutdown():
     #    drawMarkers(transformedPoints)
     #    rate.sleep()
-
-    
     
     while transformedPoints.size > 0:
-        #humansTooClose = tooClose() 
 
-        #if humansTooClose != None & humansTooClose not in attackedHumans:
-        #    attackHumans(humansTooClose, action_client, soundhandle)
-        #    attackedHumans.insert(humansTooClose)
+        humansTooClose = tooClose() 
+
+        if humansTooClose != None:
+            halfwayPoint = getHalfwayPoint(humansTooClose[0], humansTooClose[1])
+            halfwayPoint.append(4)
+            transformedPoints = np.insert(transformedPoints, 0, halfwayPoint, axis=0)
+            attackedHumans.insert(0, humansTooClose[0])
+            attackedHumans.insert(0, humansTooClose[1])
 
         goal_point = transformedPoints[0,:]
         transformedPoints = transformedPoints[1:,:]
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
 
-        if goal_point[2] == 3:
+        if goal_point[2] == 4:
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = faceOrientation[0, 0]
+            goal.target_pose.pose.orientation.w = faceOrientation[0, 1]
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
             
+            soundhandle.say("Danger! Please move further apart.")
+
+        elif goal_point[2] == 3:
             face_x = goal_point[0]
             face_y = goal_point[1]
             face_z = faceOrientation[0, 0]
@@ -275,6 +286,10 @@ def navigate():
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
+
+            for i in faceData:
+                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]) & (i["mask"] == False):
+                    soundhandle.say("Put on mask.")
 
         elif goal_point[2] == 2:
             c = classifyColor()
@@ -410,11 +425,14 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
     global face_goals_num
     global transformedPoints
     global faceOrientation
+    global faceData
+
     if len(face_goals_array.goals) > face_goals_num:
         face_goals = face_goals_array.goals[face_goals_num:]
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
+            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
         face_goals_num = len(face_goals_array.goals)
 
 
@@ -479,6 +497,7 @@ if __name__ == "__main__":
     transformedPoints = transformCoordinates(ros_map, centres)
     cylinderOrientation = np.empty(shape=(0,2))
     faceOrientation = np.empty(shape=(0,2))
+    faceData = []
     markerColor = []
     rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)

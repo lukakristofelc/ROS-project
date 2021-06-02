@@ -19,8 +19,6 @@ from scipy.spatial import distance
 from nav_msgs.msg import Odometry
 from homework4.msg import FaceGoals,FaceGoalsArray
 
-wearing_mask = True
-
 class face_localizer:
     def __init__(self):
         rospy.init_node('face_localizer', anonymous=True)
@@ -30,8 +28,8 @@ class face_localizer:
 
         # The function for performin HOG face detection
         #self.face_detector = dlib.get_frontal_face_detector()
-        self.face_net = cv2.dnn.readNetFromCaffe('/home/krblaz/Documents/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/krblaz/Documents/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
-        self.mask_net = load_model("/home/krblaz/Documents/RIS/src/homework4/scripts/mask_detector.model")
+        self.face_net = cv2.dnn.readNetFromCaffe('/home/luka/RIS/src/homework4/scripts/deploy.prototxt.txt','/home/luka/RIS/src/homework4/scripts/res10_300x300_ssd_iter_140000.caffemodel')
+        self.mask_net = load_model("/home/luka/RIS/src/homework4/scripts/mask_detector.model")
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
@@ -50,6 +48,7 @@ class face_localizer:
         self.num = 0
         self.centres = np.empty((10,3))
         self.all_points = []
+        self.wearing_mask = []
         self.centres_offsets = np.empty((10,3))
         self.all_points_offsets = []
 
@@ -199,8 +198,8 @@ class face_localizer:
         self.face_net.setInput(blob)
         face_detections = self.face_net.forward()
 
-        # cv2.imshow("ImgWindow", rgb_image)
-        # cv2.waitKey(1)
+        cv2.imshow("ImgWindow", rgb_image)
+        cv2.waitKey(1)
 
         for i in range(0, face_detections.shape[2]):
             confidence = face_detections[0, 0, i, 2]
@@ -225,9 +224,9 @@ class face_localizer:
 
                 mask = self.mask_net.predict(face, batch_size=32)
                 mask = mask[0]
-                wearing_mask = True
+                is_wearing_mask = True
                 if mask[0] < mask[1]:
-                    wearing_mask = False
+                    is_wearing_mask = False
                 
                 # Find the distance to the detected face
                 face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
@@ -262,6 +261,7 @@ class face_localizer:
                         self.all_points_offsets[self.num].append(offset)
                         self.centres[self.num,:]=point
                         self.centres_offsets[self.num,:]=offset
+                        self.wearing_mask.append(is_wearing_mask)
                         self.num+=1
                     else:
                         i = np.argmin(d)
@@ -320,7 +320,7 @@ class face_localizer:
             face_goal.coords = (self.centres[i,:2]+self.centres_offsets[i,:2]).tolist()
             angle=np.arctan2(-self.centres_offsets[i,1],-self.centres_offsets[i,0])
             face_goal.coords.extend([np.sin(angle/2),np.cos(angle/2)])
-            face_goal.wearing_mask = wearing_mask
+            face_goal.wearing_mask = self.wearing_mask[i]
             face_goal_array.goals.append(face_goal)
             
         self.markers_pub.publish(marker_array)

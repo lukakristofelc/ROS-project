@@ -39,7 +39,6 @@ colors = {'red': (35.00,24.00,11.00),
 def colorDistance(left, right):
     return sum((l-r)**2 for l, r in zip(left, right))**0.5
 
-
 class NearestColorKey(object):
     def __init__(self, goal):
         self.goal = goal
@@ -206,6 +205,7 @@ def navigate():
     global cylinderOrientation
     global faceOrientation
     global attackedHumans
+    global faceData
 
     soundhandle = SoundClient()
 
@@ -266,6 +266,10 @@ def navigate():
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
+
+            for i in faceData:
+                if (i.x == goal_point[0]) & (i.y == goal_point[4]) & (i.mask == False):
+                    soundhandle.say("Put on mask.")
 
         elif goal_point[2] == 2:
             c = classifyColor()
@@ -401,13 +405,14 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
     global face_goals_num
     global transformedPoints
     global faceOrientation
-    global wearingMask
+    global faceData
+
     if len(face_goals_array.goals) > face_goals_num:
         face_goals = face_goals_array.goals[face_goals_num:]
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            wearingMask = np.insert(wearingMask, 0, face_goal.wearing_mask, axis=0)
+            faceData.insert({'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
         face_goals_num = len(face_goals_array.goals)
 
 
@@ -472,7 +477,7 @@ if __name__ == "__main__":
     transformedPoints = transformCoordinates(ros_map, centres)
     cylinderOrientation = np.empty(shape=(0,2))
     faceOrientation = np.empty(shape=(0,2))
-    wearingMask = []
+    faceData = []
     markerColor = []
     rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)

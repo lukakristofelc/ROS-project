@@ -75,8 +75,8 @@ class CylinderMarkers:
         cv2.circle(circle_filter, tuple(point), 8, 255, -1)
         filterd_image = cv2.bitwise_and(self.map_data, self.map_data, mask = circle_filter.astype("int8"))
         indices = np.nonzero(filterd_image)
-        y_offset = np.sum(indices[0] - point[1])
-        x_offset = np.sum(indices[1] - point[0])
+        y_offset = sum((indices[0] - point[1]) > 0) - sum((indices[0] - point[1]) < 0)
+        x_offset = sum((indices[1] - point[0]) > 0) - sum((indices[1] - point[0]) < 0)
         angle = np.arctan2(y_offset, x_offset)
         offset = point - np.array([np.cos(angle), np.sin(angle)]) * self.offset_dist
         return np.array(list(self.frame * (PyKDL.Vector(offset[0], offset[1], 0) * self.map_resolution)))
@@ -115,10 +115,11 @@ class CylinderMarkers:
             pose.position.x = self.offset_centres[i,0]
             pose.position.y = self.offset_centres[i,1]
             pose.position.z = self.offset_centres[i,2]
-            pose.orientation.x = 1
+            angle = np.arctan2(self.centres[i,1]-self.offset_centres[i,1],self.centres[i,0]-self.offset_centres[i,0])
+            pose.orientation.x = 0
             pose.orientation.y = 0
-            pose.orientation.z = 0
-            pose.orientation.w = 1
+            pose.orientation.z = np.sin(angle/2)
+            pose.orientation.w = np.cos(angle/2)
 
             marker = Marker()
             marker.header.stamp = rospy.Time(0)
@@ -130,7 +131,7 @@ class CylinderMarkers:
             marker.lifetime = rospy.Duration.from_sec(2)
             marker.id = i
             marker.scale = Vector3(0.1, 0.1, 0.1)
-            marker.color = ColorRGBA(0, 0, 1, 1)
+            marker.color = ColorRGBA(self.color_centres[i][0]/255, self.color_centres[i][1]/255, self.color_centres[i][2]/255, 1)
             marker_array.markers.append(marker)
         self.offset_pub.publish(marker_array)
 

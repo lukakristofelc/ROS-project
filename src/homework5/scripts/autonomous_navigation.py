@@ -33,6 +33,8 @@ cylinder_num = 0
 attackedHumans = []
 face_goals_num = 0
 digits_results = "-"
+qr_results = "-"
+cylinder_data = {}
 
 colors = {'red': (35.00,24.00,11.00),
           'green': (54.92,-38.11,31.68),
@@ -215,11 +217,14 @@ def navigate():
     global attackedHumans
     global faceData
     global digits_results
+    global qr_results
     global detected_speech
+    global cylinder_data
 
     soundhandle = SoundClient()
 
     digits_pub = rospy.Publisher('toggle_digits', Bool)
+    qr_pub = rospy.Publisher('toggle_qr', Bool)
     pub_arm = rospy.Publisher('arm_command', String)
     odom: Odometry = rospy.wait_for_message("/odom", Odometry)
     action_client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
@@ -326,9 +331,6 @@ def navigate():
 
                     detected_speech = ""
 
-
-            
-
         elif goal_point[2] == 2: # Pot do cilindra
             c = classifyColor()
             goal.target_pose.pose.position.x = goal_point[0]
@@ -342,8 +344,13 @@ def navigate():
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
 
-            ring_color = getRingColor()
-            print(ring_color)
+            qr_pub.publish(True)
+            while qr_results == "-":
+                time.sleep(1)
+            qr_pub.publish(False)
+
+            cylinder_data[c] = qr_results
+            print(cylinder_data)
 
         elif goal_point[2] == 1: # Pot do obroča
             c = classifyColor()
@@ -424,23 +431,22 @@ def classifyColor():
     global markerColor
     rgb = [markerColor[0].r*255, markerColor[0].g*255, markerColor[0].b*255]
     cylinderColor = rgb2lab(rgb)
-    print(cylinderColor)
+    #print(cylinderColor)
     color = min(colors.items(), key=NearestColorKey(cylinderColor))
-    print(color)
+    #print(color)
     markerColor = markerColor[1:]
     return color[0]
 
-
-def ringMarkersCallback(ring_markers: MarkerArray):
-    global ring_num
-    global transformedPoints
-    global markerColor
-    if len(ring_markers.markers) > ring_num:
-        ring_goals = ring_markers.markers[ring_num:]
-        for ring_goal in ring_goals:
-            transformedPoints = np.insert(transformedPoints, 0, [ring_goal.pose.position.x, ring_goal.pose.position.y, 1], axis=0)
-            markerColor = [ring_goal.color] + markerColor
-        ring_num=len(ring_markers.markers)
+# def ringMarkersCallback(ring_markers: MarkerArray):
+#     global ring_num
+#     global transformedPoints
+#     global markerColor
+#     if len(ring_markers.markers) > ring_num:
+#         ring_goals = ring_markers.markers[ring_num:]
+#         for ring_goal in ring_goals:
+#             transformedPoints = np.insert(transformedPoints, 0, [ring_goal.pose.position.x, ring_goal.pose.position.y, 1], axis=0)
+#             markerColor = [ring_goal.color] + markerColor
+#         ring_num=len(ring_markers.markers)
 
 
 def cylinderMarkersCallback(cylinder_markers: MarkerArray):
@@ -479,8 +485,8 @@ def detectedSpeechCallback(detectedSpeech: String):
     detected_speech = detectedSpeech
 
 def qrDataCallback(data):
-    global dataURL
-    dataURL = data.data
+    global qr_results
+    qr_results = data.data
 
 def getRingColor():
     global dataURL

@@ -14,7 +14,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from python_tsp.exact import solve_tsp_dynamic_programming
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 from homework4.msg import FaceGoals, FaceGoalsArray
 from sound_play.libsoundplay import SoundClient
 
@@ -25,6 +25,7 @@ ring_num = 0
 cylinder_num = 0
 attackedHumans = []
 face_goals_num = 0
+digits_results = "-"
 
 colors = {'red': (35.00,24.00,11.00),
           'green': (54.92,-38.11,31.68),
@@ -209,6 +210,7 @@ def navigate():
 
     soundhandle = SoundClient()
 
+    digits_pub = rospy.Publisher('toggle_digits', Bool)
     pub_arm = rospy.Publisher('arm_command', String)
     odom: Odometry = rospy.wait_for_message("/odom", Odometry)
     action_client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
@@ -271,6 +273,9 @@ def navigate():
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
 
+            digits_pub.publish(True)
+            time.sleep(1)
+
             s = np.arcsin(face_z)
             c = np.arccos(face_w)
             angle = np.sign(s)*np.sign(c)*np.abs(s)
@@ -286,6 +291,11 @@ def navigate():
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
+            
+            while digits_results == "-":
+                pass 
+            
+            digits_pub.publish(False)
 
             for i in faceData:
                 if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]) & (i["mask"] == False):
@@ -435,6 +445,9 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
             faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
         face_goals_num = len(face_goals_array.goals)
 
+def digitsResultsCallback(data: String):
+    global digits_results
+    digits_results = data.data
 
 def rgb2lab(inputColor):
     num = 0
@@ -502,6 +515,7 @@ if __name__ == "__main__":
     rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
+    rospy.Subscriber("digits_results",String,digitsResultsCallback)
     navigate()
 
     #rate = rospy.Rate(1)

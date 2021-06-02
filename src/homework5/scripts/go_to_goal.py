@@ -29,7 +29,7 @@ if len(sys.argv) > 5:
         goToGoal(x,y,z,w)
 elif len(sys.argv) > 1:
     if sys.argv[1] == "r":
-        goToGoal(0,0,-0.70710678118,0.70710678118)
+        goToGoal(0.05413441496625467,-0.2360389709615241,-0.47360035378226323,0.8807398622165997)
     elif sys.argv[1] == "g":
         coords = input()
         coords = coords.split()

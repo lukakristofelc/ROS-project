@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from std_msgs.msg import ColorRGBA
+from std_msgs.msg import ColorRGBA, Bool, String
 import pytesseract
 
 dictm = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
@@ -36,79 +36,86 @@ class DigitExtractor:
         # An object we use for converting images between ROS format and OpenCV format
         self.bridge = CvBridge()
 
-        self.result = []
+        self.active = False
 
         # Subscribe to the image and/or depth topic
         self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
+        self.active_sub = rospy.Subscriber("/toggle_digits", Bool, self.toggleActive)
+        self.digits_pub = rospy.Publisher("digits_results", String)
+
+    def toggleActive(self,data: Bool):
+        self.active = data.data
+        if not data.data:
+            self.digits_pub.publish("-")
 
     def image_callback(self,data):
         # print('Iam here!')
+        if self.active:
+            try:
+                cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            except CvBridgeError as e:
+                print(e)
+                
+            corners, ids, rejected_corners = cv2.aruco.detectMarkers(cv_image,dictm,parameters=params)
+            img = np.copy(cv_image)
 
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-            
-        corners, ids, rejected_corners = cv2.aruco.detectMarkers(cv_image,dictm,parameters=params)
-        img = np.copy(cv_image)
+            if ids is not None and len(ids) > 0:
+                corners_cen = np.squeeze(np.mean(corners,axis=2))
+                
+                if len(corners_cen.shape) < 2:
+                    corners_cen = np.array([corners_cen])
 
-        if ids is not None and len(ids) > 0:
-            corners_cen = np.squeeze(np.mean(corners,axis=2))
-            
-            if len(corners_cen.shape) < 2:
-                corners_cen = np.array([corners_cen])
-
-            s = np.argsort(corners_cen,axis=0)[:,0]
-            sorted_ids = np.squeeze(ids[s])
+                s = np.argsort(corners_cen,axis=0)[:,0]
+                sorted_ids = np.squeeze(ids[s])
 
 
-            
-            for corner in corners_cen:
-                img = cv2.circle(img, tuple(corner.astype(int)), 20, (255,0,0), 2)
+                
+                for corner in corners_cen:
+                    img = cv2.circle(img, tuple(corner.astype(int)), 20, (255,0,0), 2)
 
-        cv2.imshow("fddsfsd",img)
-        cv2.waitKey(1)
+            cv2.imshow("fddsfsd",img)
+            cv2.waitKey(1)
 
-        if ids is not None and len(ids) >= 4:
+            if ids is not None and len(ids) >= 4:
 
-            areas = [x for x in range(len(sorted_ids)-3) if (np.all(sorted_ids[x:x+4] == [1,3,2,4]) or np.all(sorted_ids[x:x+4] == [3,1,2,4]) or np.all(sorted_ids[x:x+4] == [1,3,4,2]) or np.all(sorted_ids[x:x+4] == [3,1,4,2]))]
+                areas = [x for x in range(len(sorted_ids)-3) if (np.all(sorted_ids[x:x+4] == [1,3,2,4]) or np.all(sorted_ids[x:x+4] == [3,1,2,4]) or np.all(sorted_ids[x:x+4] == [1,3,4,2]) or np.all(sorted_ids[x:x+4] == [3,1,4,2]))]
 
-            image_size=(351,248,3)
-            marker_side=50
-            out_pts = np.array([[marker_side/2,image_size[0]-marker_side/2],
-                                    [image_size[1]-marker_side/2,image_size[0]-marker_side/2],
-                                    [marker_side/2,marker_side/2],
-                                    [image_size[1]-marker_side/2,marker_side/2]])
+                image_size=(351,248,3)
+                marker_side=50
+                out_pts = np.array([[marker_side/2,image_size[0]-marker_side/2],
+                                        [image_size[1]-marker_side/2,image_size[0]-marker_side/2],
+                                        [marker_side/2,marker_side/2],
+                                        [image_size[1]-marker_side/2,marker_side/2]])
 
-            out_text = ""
-            for area in areas:
-                img_out = np.zeros(image_size, np.uint8)
-                src_points = np.zeros((4,2))
-                cen_point = np.mean(corners_cen[s][area:area+4],axis=0)
-                conrners = corners_cen[s][area:area+4]
+                out_text = ""
+                for area in areas:
+                    img_out = np.zeros(image_size, np.uint8)
+                    src_points = np.zeros((4,2))
+                    cen_point = np.mean(corners_cen[s][area:area+4],axis=0)
+                    conrners = corners_cen[s][area:area+4]
 
-                for coords in conrners:
-                    if coords[0]<cen_point[0] and coords[1]<cen_point[1]:
-                        src_points[2]=coords
-                    elif coords[0]<cen_point[0] and coords[1]>cen_point[1]:
-                        src_points[0]=coords
-                    elif coords[0]>cen_point[0] and coords[1]<cen_point[1]:
-                        src_points[3]=coords
-                    else:
-                        src_points[1]=coords
+                    for coords in conrners:
+                        if coords[0]<cen_point[0] and coords[1]<cen_point[1]:
+                            src_points[2]=coords
+                        elif coords[0]<cen_point[0] and coords[1]>cen_point[1]:
+                            src_points[0]=coords
+                        elif coords[0]>cen_point[0] and coords[1]<cen_point[1]:
+                            src_points[3]=coords
+                        else:
+                            src_points[1]=coords
 
-                h, status = cv2.findHomography(src_points, out_pts)
-                img_out = cv2.warpPerspective(cv_image, h, (img_out.shape[1],img_out.shape[0]))
-                img_out = img_out[125:221,50:195,:]
-                img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2GRAY)
-                img_out = cv2.adaptiveThreshold(img_out,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,5)
+                    h, status = cv2.findHomography(src_points, out_pts)
+                    img_out = cv2.warpPerspective(cv_image, h, (img_out.shape[1],img_out.shape[0]))
+                    img_out = img_out[125:221,50:195,:]
+                    img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2GRAY)
+                    img_out = cv2.adaptiveThreshold(img_out,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,5)
 
-                config = '--psm 13 outputbase nobatch digits'
-                text = pytesseract.image_to_string(img_out, config = config)
-                text = text.strip()
-                if len(text) == 2 and text not in self.result:
-                    self.result.append(text)
-        print("\r{}".format(self.result),end="")
+                    config = '--psm 13 outputbase nobatch digits'
+                    text = pytesseract.image_to_string(img_out, config = config)
+                    text = text.strip()
+                    if len(text) == 2 and self.active:
+                        print(text)
+                        self.digits_pub.publish(text)
 
 
 def main(args):

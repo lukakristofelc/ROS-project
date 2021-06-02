@@ -319,7 +319,7 @@ def navigate():
 
                     soundhandle.say("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
 
-                    text = detect_speech_client("vijola_maska.wav")
+                    text = detect_speech_client(i["sound_file"])
                     print(text)
 
                     vaccinated = text.split(" ")[0]
@@ -480,7 +480,19 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":""})
+
+            soundFile = ""
+
+            if (face_goal.coords[0] < 1) & (face_goal.coords[0] > 0.8) & (face_goal.coords[1] > 0.8) & (face_goal.coords[1] < 1):
+                soundFile = "vijola_maska.wav"
+            elif (face_goal.coords[0] > -0.25) & (face_goal.coords[0] < 0.05) & (face_goal.coords[1] > -1.65) & (face_goal.coords[1] < -1.45):
+                soundFile = "oranzna_maska.wav"
+            elif (face_goal.coords[0] > 1.25) & (face_goal.coords[0] < 1.45) & (face_goal.coords[1] > 2.55) & (face_goal.coords[1] < 2.75):
+                soundFile = "brez_maske.wav"
+            else:
+                soundFile = "azijka.wav"
+
+            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":"", "sound_file":soundFile})
         face_goals_num = len(face_goals_array.goals)
 
 def digitsResultsCallback(data: String):

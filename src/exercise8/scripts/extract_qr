@@ -9,15 +9,10 @@ import numpy as np
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from std_msgs.msg import ColorRGBA
+from std_msgs.msg import String
+from exercise8.srv import Person_info
 
 import pyzbar.pyzbar as pyzbar
-
-from urllib.request import urlopen
-#Data manipulation
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.neighbors import KNeighborsClassifier
-import pandas as pd
 
 
 dictm = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
@@ -25,21 +20,15 @@ dictm = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 # The object that we will pass to the markerDetect function
 params =  cv2.aruco.DetectorParameters_create()
 
-print(params.adaptiveThreshConstant) 
-print(params.adaptiveThreshWinSizeMax)
-print(params.adaptiveThreshWinSizeMin)
-print(params.minCornerDistanceRate)
-print(params.adaptiveThreshWinSizeStep)
-
 # To see description of the parameters
 # https://docs.opencv.org/3.3.1/d1/dcd/structcv_1_1aruco_1_1DetectorParameters.html
 
 # You can set these parameters to get better marker detections
 params.adaptiveThreshConstant = 25
-adaptiveThreshWinSizeStep = 2
+params.adaptiveThreshWinSizeStep = 2
 
 
-class QRExtractor:
+class QRExtractor():
     def __init__(self):
         rospy.init_node('image_converter', anonymous=True)
 
@@ -49,13 +38,10 @@ class QRExtractor:
         # Subscribe to the image and/or depth topic
         self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
 
+        # Publish the predicted vaccine
+        self.data_pub = rospy.Publisher("qr_data", String, queue_size=10)
+
     def image_callback(self,data):
-        # Scaler
-        #scaler = MinMaxScaler()
-
-        # KNN classifier
-        knn = KNeighborsClassifier(n_neighbors=9) #9 je kr dobr, pa 7 tudi
-
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
@@ -70,34 +56,9 @@ class QRExtractor:
             dObject = decodedObjects[0]
             data = dObject.data.decode("utf-8")
             print("Found 1 QR code in the image!")
-            #print("Data: ", data,'\n')
+            print("Data: ", data,'\n')
             # Data from URL
-            f = urlopen(data)
-            myfile = f.read()
-            dataURL = (myfile.decode("utf-8")).splitlines()
-            array = []
-            for d in dataURL:
-                array.append(d.split(','))
-
-            if len(dataURL)>1:
-                #print("Data from URL: ", dataURL[1],'\n')
-                age = 100.0
-                exercise = 40.0
-                dataFrame = pd.DataFrame(array, columns=['age', 'exerciseHours', 'vaccine'])
-                #print(dataFrame)
-                feature_names = ['age', 'exerciseHours']
-                X = dataFrame[feature_names]
-                y = dataFrame['vaccine']
-                #X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
-                #X_train = scaler.fit_transform(X)
-                #X_test = scaler.transform([[19.19, 22.04]])
-                knn.fit(X, y)
-                #print('Accuracy of K-NN classifier on training set: {:.2f}'.format(knn.score(X_train, y_train)))
-                #print('Accuracy of K-NN classifier on test set: {:.2f}'.format(knn.score(X_test, y_test)))
-                # Predict the right vaccine
-                vaccine = knn.predict([[age, exercise]])
-                print(vaccine[0])
-
+            self.data_pub.publish(data)
             
             # Visualize the detected QR code in the image
             points  = dObject.polygon
@@ -116,16 +77,31 @@ class QRExtractor:
                 
             cv2.imshow('Warped image',cv_image)
             cv2.waitKey(1)
+            return
                 
         elif len(decodedObjects)==0:
-            print("No QR code in the image")
+            print('No QR code in the image')
         else:
-            print("Found more than 1 QR code")
+            print('Found more than 1 QR code')
+
+
+##def getVaccine(req):
+#    print(req.age)
+#    print(req.exercise)
+#    qr = QRExtractor()
+#    while(not qr.getQR()):
+#        print("TUKAJ")
+#    print("KONEC")
+#    return qr.vaccine[0]
 
 
 def main(args):
 
-    qre = QRExtractor()
+    qr = QRExtractor()
+
+    #rospy.init_node('Vaccine_service')
+    #s = rospy.Service('Vaccine', Person_info, getVaccine)
+    #rospy.spin()
 
     rate = rospy.Rate(1)
     while not rospy.is_shutdown():

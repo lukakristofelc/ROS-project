@@ -18,6 +18,13 @@ from std_msgs.msg import String, Bool
 from homework4.msg import FaceGoals, FaceGoalsArray
 from sound_play.libsoundplay import SoundClient
 
+#Data manipulation
+from urllib.request import urlopen
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.neighbors import KNeighborsClassifier
+import pandas as pd
+
 map_valus={-1:0,0:255,100:0}
 elements = [[[1,0,1],[0,1,0],[0,1,0]],[[0,1,0],[0,1,1],[1,0,0]],[[0,0,1],[1,1,0],[0,0,1]],[[1,0,0],[0,1,1],[0,1,0]],[[0,1,0],[0,1,0],[1,0,1]],[[0,0,1],[1,1,0],[0,1,0]],[[1,0,0],[0,1,1],[1,0,0]],[[0,1,0],[1,1,0],[0,0,1]],[[1,0,0],[0,1,0],[1,0,1]],[[1,0,1],[0,1,0],[1,0,0]],[[1,0,1],[0,1,0],[0,0,1]],[[0,0,1],[0,1,0],[1,0,1]]]
 elements = np.array(elements)
@@ -208,6 +215,7 @@ def navigate():
     global attackedHumans
     global faceData
     global digits_results
+    global detected_speech
 
     soundhandle = SoundClient()
 
@@ -257,7 +265,7 @@ def navigate():
             
             soundhandle.say("Danger! Please move further apart.")
 
-        elif goal_point[2] == 3:
+        elif goal_point[2] == 3: # Pot do obraza
             face_x = goal_point[0]
             face_y = goal_point[1]
             face_z = faceOrientation[0, 0]
@@ -299,10 +307,29 @@ def navigate():
             digits_pub.publish(False)
 
             for i in faceData:
-                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]) & (i["mask"] == False):
-                    soundhandle.say("Put on mask.")
+                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]):
+                    if i["mask"] == False:
+                        soundhandle.say("Put on mask.")
 
-        elif goal_point[2] == 2:
+                    soundhandle.say("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
+
+                    while detected_speech == "":
+                        time.sleep(1)
+
+                    vaccinated = detected_speech.data.split(" ")[0]
+                    doctor_name = detected_speech.data.split(" ")[1]
+                    hours_of_exercise = detected_speech.data.split(" ")[2]
+
+                    i["vaccinated"] = vaccinated
+                    i["doctor"] = doctor_name
+                    i["exercise"] = hours_of_exercise
+
+                    detected_speech = ""
+
+
+            
+
+        elif goal_point[2] == 2: # Pot do cilindra
             c = classifyColor()
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
@@ -315,13 +342,10 @@ def navigate():
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
 
-            soundhandle.say(c)
+            ring_color = getRingColor()
+            print(ring_color)
 
-            pub_arm.publish("extend")
-            time.sleep(3)
-            pub_arm.publish("retract")
-
-        elif goal_point[2] == 1:
+        elif goal_point[2] == 1: # Pot do obroča
             c = classifyColor()
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
@@ -335,7 +359,7 @@ def navigate():
 
             soundhandle.say(c)
 
-        else:
+        else: # Navadna pot
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
             goal.target_pose.pose.orientation.z = 1
@@ -443,12 +467,58 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
+            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":""})
         face_goals_num = len(face_goals_array.goals)
 
 def digitsResultsCallback(data: String):
     global digits_results
     digits_results = data.data
+    
+def detectedSpeechCallback(detectedSpeech: String):
+    global detected_speech
+    detected_speech = detectedSpeech
+
+def qrDataCallback(data):
+    global dataURL
+    dataURL = data.data
+
+def getRingColor():
+    global dataURL
+    color = ''
+    age = 10
+    exercise = 10
+    # KNN classifier
+    knn = KNeighborsClassifier(n_neighbors=9) #9 je kr dobr, pa 7 tudi
+    f = urlopen(dataURL)
+    myfile = f.read()
+    data = (myfile.decode("utf-8")).splitlines()
+    array = []
+    for d in data:
+        array.append(d.split(','))
+    if len(array)>1:
+        #print("Data from URL: ", dataURL[1],'\n')
+        dataFrame = pd.DataFrame(array, columns=['age', 'exerciseHours', 'vaccine'])
+        #print(dataFrame)
+        feature_names = ['age', 'exerciseHours']
+        X = dataFrame[feature_names]
+        y = dataFrame['vaccine']
+        knn.fit(X, y)
+        #print('Accuracy of K-NN classifier on training set: {:.2f}'.format(knn.score(X_train, y_train)))
+        #print('Accuracy of K-NN classifier on test set: {:.2f}'.format(knn.score(X_test, y_test)))
+        # Predict the right vaccine
+        vaccine = knn.predict([[age, exercise]])
+        print(vaccine[0])
+        if (vaccine[0] == 'BlacknikV'):
+            color = 'black'
+        elif (vaccine[0] == 'Greenzer'):
+            color = 'green'
+        elif (vaccine[0] == 'StellaBluera'):
+            color = 'blue'
+        elif (vaccine[0] == 'Rederna'):
+            color = 'red'
+        else:
+            color = ''
+    return color
 
 def rgb2lab(inputColor):
     num = 0
@@ -513,10 +583,13 @@ if __name__ == "__main__":
     faceOrientation = np.empty(shape=(0,2))
     faceData = []
     markerColor = []
-    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
+    detected_speech = ""
+    dataURL = ''
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
     rospy.Subscriber("digits_results",String,digitsResultsCallback)
+    rospy.Subscriber("detected_speech", String, detectedSpeechCallback)
+    rospy.Subscriber("qr_data", String, qrDataCallback)
     navigate()
 
     #rate = rospy.Rate(1)

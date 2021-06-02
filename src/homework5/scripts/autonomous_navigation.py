@@ -206,6 +206,7 @@ def navigate():
     global faceOrientation
     global attackedHumans
     global faceData
+    global detected_speech
 
     soundhandle = SoundClient()
 
@@ -288,8 +289,27 @@ def navigate():
                 time.sleep(1)
 
             for i in faceData:
-                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]) & (i["mask"] == False):
-                    soundhandle.say("Put on mask.")
+                if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]):
+                    if i["mask"] == False:
+                        soundhandle.say("Put on mask.")
+
+                    soundhandle.say("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
+
+                    while detected_speech == "":
+                        time.sleep(1)
+
+                    vaccinated = detected_speech.data.split(" ")[0]
+                    doctor_name = detected_speech.data.split(" ")[1]
+                    hours_of_exercise = detected_speech.data.split(" ")[2]
+
+                    i["vaccinated"] = vaccinated
+                    i["doctor"] = doctor_name
+                    i["exercise"] = hours_of_exercise
+
+                    detected_speech = ""
+
+
+            
 
         elif goal_point[2] == 2:
             c = classifyColor()
@@ -432,9 +452,12 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':""})
+            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":""})
         face_goals_num = len(face_goals_array.goals)
 
+def detectedSpeechCallback(detectedSpeech: String):
+    global detected_speech
+    detected_speech = detectedSpeech
 
 def rgb2lab(inputColor):
     num = 0
@@ -499,9 +522,10 @@ if __name__ == "__main__":
     faceOrientation = np.empty(shape=(0,2))
     faceData = []
     markerColor = []
-    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
+    detected_speech = ""
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
+    rospy.Subscriber("detected_speech", String, detectedSpeechCallback)
     navigate()
 
     #rate = rospy.Rate(1)

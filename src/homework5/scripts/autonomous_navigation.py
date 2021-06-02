@@ -17,6 +17,7 @@ from python_tsp.exact import solve_tsp_dynamic_programming
 from std_msgs.msg import String, Bool
 from homework4.msg import FaceGoals, FaceGoalsArray
 from sound_play.libsoundplay import SoundClient
+from homework7.srv import *
 
 #Data manipulation
 from urllib.request import urlopen
@@ -318,18 +319,16 @@ def navigate():
 
                     soundhandle.say("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
 
-                    while detected_speech == "":
-                        time.sleep(1)
+                    text = detect_speech_client("vijola_maska.wav")
+                    print(text)
 
-                    vaccinated = detected_speech.data.split(" ")[0]
-                    doctor_name = detected_speech.data.split(" ")[1]
-                    hours_of_exercise = detected_speech.data.split(" ")[2]
+                    vaccinated = text.split(" ")[0]
+                    doctor_name = text.split(" ")[1]
+                    hours_of_exercise = text.split(" ")[2]
 
                     i["vaccinated"] = vaccinated
                     i["doctor"] = doctor_name
                     i["exercise"] = hours_of_exercise
-
-                    detected_speech = ""
 
         elif goal_point[2] == 2: # Pot do cilindra
             c = classifyColor()
@@ -426,6 +425,14 @@ def drawMarkers(transformedPoints: np.array):
         marker_array.markers.append(marker)
     pub.publish(marker_array)
 
+def detect_speech_client(nameOfFile):
+    rospy.wait_for_service('detect_speech')
+    try:
+        detect_speech = rospy.ServiceProxy('detect_speech', Speech)
+        resp1 = detect_speech(nameOfFile)
+        return resp1.detected_speech
+    except rospy.ServiceException as e:
+        print("Service call failed: %s"%e)
 
 def classifyColor():
     global markerColor
@@ -473,16 +480,12 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
         for face_goal in face_goals:
             transformedPoints = np.insert(transformedPoints, 0, [face_goal.coords[0],face_goal.coords[1],3], axis=0)
             faceOrientation = np.insert(faceOrientation, 0, [face_goal.coords[2],face_goal.coords[3]], axis=0)
-            faceData.insert(0, {'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":""})
+            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":""})
         face_goals_num = len(face_goals_array.goals)
 
 def digitsResultsCallback(data: String):
     global digits_results
     digits_results = data.data
-    
-def detectedSpeechCallback(detectedSpeech: String):
-    global detected_speech
-    detected_speech = detectedSpeech
 
 def qrDataCallback(data):
     global qr_results
@@ -589,12 +592,10 @@ if __name__ == "__main__":
     faceOrientation = np.empty(shape=(0,2))
     faceData = []
     markerColor = []
-    detected_speech = ""
     dataURL = ''
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
     rospy.Subscriber("digits_results",String,digitsResultsCallback)
-    rospy.Subscriber("detected_speech", String, detectedSpeechCallback)
     rospy.Subscriber("qr_data", String, qrDataCallback)
     navigate()
 

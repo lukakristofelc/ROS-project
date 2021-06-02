@@ -6,13 +6,13 @@ import rospy
 
 import speech_recognition as sr
 from os import path
-from std_msgs.msg import String
+from homework7.srv import Speech
 
 
 
 class SpeechTranscriber:
     def __init__(self):
-        rospy.init_node('speech_transcriber', anonymous=True)
+        #rospy.init_node('speech_transcriber', anonymous=True)
         
         # The documentation is here: https://github.com/Uberi/speech_recognition
 
@@ -33,16 +33,18 @@ class SpeechTranscriber:
         # An interface to the default microphone
         self.mic = sr.Microphone()
 
-        # Audio iz datoteke
-        AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), "dialog2.wav")
-        self.sound = sr.AudioFile(AUDIO_FILE)
         
         
         # You can get the list of available devices: sr.Microphone.list_microphone_names()
     # You can set the default microphone like this: self. mic = sr.Microphone(device_index=3)
     # where the device_index is the position in the list from the first command.
 
-    def recognize_speech(self):
+    def recognize_speech(self, nameOfFile):
+
+        # Audio iz datoteke
+        AUDIO_FILE = path.join(path.dirname(path.realpath(__file__)), str(nameOfFile))
+        self.sound = sr.AudioFile(AUDIO_FILE)
+
         with self.sound as source:
             audio = self.sr.record(source)  # read the entire audio file
 
@@ -59,22 +61,24 @@ class SpeechTranscriber:
             print('API is probably unavailable', e)
         except sr.UnknownValueError:
             print('Did not manage to recognize anything.')
-            
+        
         recognized_text = recognized_text.split()
 
         return recognized_text
 
+def handle_detect_speech(req):
+    print(req.name_of_file)
+    st = SpeechTranscriber()
+    text = st.recognize_speech(req.name_of_file)
+    print("Returning [%s %s %s]"%(text[0], text[1], text[2]))
+    
+    res = text[0] + " " + text[1] + " " + text[2]
+    return res
+  
+def handle_detect_speech_server():
+    rospy.init_node('speech_transcriber', anonymous=True)
+    s = rospy.Service('detect_speech', Speech, handle_detect_speech)
+    rospy.spin()
 
 if __name__ == '__main__':
-    
-    st = SpeechTranscriber()
-    text_pub = rospy.Publisher('detected_speech', String, queue_size=1000)
-
-    while not rospy.is_shutdown():
-        text = st.recognize_speech()
-        text = text[0] + " " + text[1] + " " + text[2]
-        text_pub.publish(text)
-        print('I recognized this sentence:', text)
-        time.sleep(4)
-
-
+    handle_detect_speech_server()

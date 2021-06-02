@@ -207,6 +207,7 @@ def navigate():
     global faceOrientation
     global attackedHumans
     global faceData
+    global digits_results
 
     soundhandle = SoundClient()
 
@@ -294,7 +295,7 @@ def navigate():
             
             while digits_results == "-":
                 pass 
-            
+
             digits_pub.publish(False)
 
             for i in faceData:

@@ -36,6 +36,7 @@ face_goals_num = 0
 digits_results = "-"
 qr_results = "-"
 cylinder_data = {}
+ring_data = []
 
 colors = {'red': (35.00,24.00,11.00),
           'green': (54.92,-38.11,31.68),
@@ -221,6 +222,7 @@ def navigate():
     global qr_results
     global detected_speech
     global cylinder_data
+    global cylinderMarkerColor
 
     soundhandle = SoundClient()
 
@@ -243,6 +245,12 @@ def navigate():
     #    rate.sleep()
     
     while transformedPoints.size > 0:
+
+        #for i in faceData:
+        #    if i["vaccinated"] == "0" and cylinder_data.get(i["doctor"]):
+        #        if i["vaccine"] == "":
+        #            i["vaccine"] = getRingColor(cylinder_data[i["doctor"]],i["age"],i["exercise"])
+                
 
         humansTooClose = tooClose() 
 
@@ -308,7 +316,9 @@ def navigate():
                 time.sleep(1)
             
             while digits_results == "-":
-                pass 
+                time.sleep(1)
+            
+            age = digits_results
 
             digits_pub.publish(False)
 
@@ -321,17 +331,20 @@ def navigate():
 
                     text = detect_speech_client(i["sound_file"])
                     print(text)
+                    print(face_x,face_y)
 
                     vaccinated = text.split(" ")[0]
                     doctor_name = text.split(" ")[1]
                     hours_of_exercise = text.split(" ")[2]
 
-                    i["vaccinated"] = vaccinated
+                    i["age"] = int(age)
+                    i["vaccinated"] = int(vaccinated)
                     i["doctor"] = doctor_name
-                    i["exercise"] = hours_of_exercise
+                    i["exercise"] = int(hours_of_exercise)
 
         elif goal_point[2] == 2: # Pot do cilindra
-            c = classifyColor()
+            c = classifyColor(cylinderMarkerColor[0])
+            cylinderMarkerColor = cylinderMarkerColor[1:]
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
             goal.target_pose.pose.orientation.z = cylinderOrientation[0, 0]
@@ -352,7 +365,6 @@ def navigate():
             print(cylinder_data)
 
         elif goal_point[2] == 1: # Pot do obroča
-            c = classifyColor()
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
             goal.target_pose.pose.orientation.z = 0.1
@@ -387,6 +399,8 @@ def navigate():
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
+
+    print("Done")
 
         # transformedPoints = transformedPoints[findShortestPath(transformedPoints)]
 
@@ -434,14 +448,10 @@ def detect_speech_client(nameOfFile):
     except rospy.ServiceException as e:
         print("Service call failed: %s"%e)
 
-def classifyColor():
-    global markerColor
-    rgb = [markerColor[0].r*255, markerColor[0].g*255, markerColor[0].b*255]
+def classifyColor(input_color):
+    rgb = [input_color.r*255, input_color.g*255, input_color.b*255]
     cylinderColor = rgb2lab(rgb)
-    #print(cylinderColor)
     color = min(colors.items(), key=NearestColorKey(cylinderColor))
-    #print(color)
-    markerColor = markerColor[1:]
     return color[0]
 
 # def ringMarkersCallback(ring_markers: MarkerArray):
@@ -455,18 +465,27 @@ def classifyColor():
 #             markerColor = [ring_goal.color] + markerColor
 #         ring_num=len(ring_markers.markers)
 
+def ringMarkersCallback(ring_markers: MarkerArray):
+    global ring_num
+
+    if len(ring_markers.markers) > ring_num:
+        ring_goals = ring_markers.markers[ring_num:]
+        for ring_goal in ring_goals:
+            ring_data.append([ring_goal.pose.position.x, ring_goal.pose.position.y, classifyColor(ring_goal.color)])
+        ring_num = len(ring_markers.markers)
+
 
 def cylinderMarkersCallback(cylinder_markers: MarkerArray):
     global cylinder_num
     global transformedPoints
     global cylinderOrientation
-    global markerColor
+    global cylinderMarkerColor
     if len(cylinder_markers.markers) > cylinder_num:
         cylinder_goals = cylinder_markers.markers[cylinder_num:]
         for cylinder_goal in cylinder_goals:
             transformedPoints = np.insert(transformedPoints, 0, [cylinder_goal.pose.position.x, cylinder_goal.pose.position.y, 2], axis=0)
             cylinderOrientation = np.insert(cylinderOrientation, 0, [cylinder_goal.pose.orientation.z, cylinder_goal.pose.orientation.w], axis=0)
-            markerColor = [cylinder_goal.color] + markerColor
+            cylinderMarkerColor = [cylinder_goal.color] + cylinderMarkerColor
         cylinder_num = len(cylinder_markers.markers)
 
 def faceGoalsCallback(face_goals_array: FaceGoalsArray):
@@ -492,7 +511,7 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
             else:
                 soundFile = "azijka.wav"
 
-            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated":"", "sound_file":soundFile})
+            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated": 0, "sound_file":soundFile})
         face_goals_num = len(face_goals_array.goals)
 
 def digitsResultsCallback(data: String):
@@ -503,14 +522,11 @@ def qrDataCallback(data):
     global qr_results
     qr_results = data.data
 
-def getRingColor():
-    global dataURL
+def getRingColor(dataUrl: String, age: int, exercise: int):
     color = ''
-    age = 10
-    exercise = 10
     # KNN classifier
     knn = KNeighborsClassifier(n_neighbors=9) #9 je kr dobr, pa 7 tudi
-    f = urlopen(dataURL)
+    f = urlopen(dataUrl)
     myfile = f.read()
     data = (myfile.decode("utf-8")).splitlines()
     array = []
@@ -603,10 +619,12 @@ if __name__ == "__main__":
     cylinderOrientation = np.empty(shape=(0,2))
     faceOrientation = np.empty(shape=(0,2))
     faceData = []
-    markerColor = []
+    cylinderMarkerColor = []
+    ringMarkerColor = []
     dataURL = ''
     rospy.Subscriber("cylinder_offsets", MarkerArray, cylinderMarkersCallback)
     rospy.Subscriber("face_goals",FaceGoalsArray, faceGoalsCallback)
+    rospy.Subscriber("ring_markers", MarkerArray, ringMarkersCallback)
     rospy.Subscriber("digits_results",String,digitsResultsCallback)
     rospy.Subscriber("qr_data", String, qrDataCallback)
     navigate()

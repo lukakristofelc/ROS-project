@@ -68,13 +68,11 @@ class DigitExtractor:
                 s = np.argsort(corners_cen,axis=0)[:,0]
                 sorted_ids = np.squeeze(ids[s])
 
+                #for corner in corners_cen:
+                #    img = cv2.circle(img, tuple(corner.astype(int)), 20, (255,0,0), 2)
 
-                
-                for corner in corners_cen:
-                    img = cv2.circle(img, tuple(corner.astype(int)), 20, (255,0,0), 2)
-
-            cv2.imshow("fddsfsd",img)
-            cv2.waitKey(1)
+            #cv2.imshow("fddsfsd",img)
+            #cv2.waitKey(1)
 
             if ids is not None and len(ids) >= 4:
 

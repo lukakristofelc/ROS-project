@@ -207,6 +207,7 @@ def getHalfwayGoal(start_point, end_point):
 def navigate():
     global transformedPoints
     global cylinderOrientation
+    global faceOrientation
     global attackedHumans
 
     soundhandle = SoundClient()
@@ -243,14 +244,34 @@ def navigate():
 
         if goal_point[2] == 3:
             
-
-            goal.target_pose.pose.position.x = goal_point[0]
-            goal.target_pose.pose.position.y = goal_point[1]
-            goal.target_pose.pose.orientation.z = faceOrientation[0, 0]
-            goal.target_pose.pose.orientation.w = faceOrientation[0, 1]
-            goal.target_pose.header.stamp = rospy.Time.now()
+            face_x = goal_point[0]
+            face_y = goal_point[1]
+            face_z = faceOrientation[0, 0]
+            face_w = faceOrientation[0, 1]
             faceOrientation = faceOrientation[1:, :]
 
+            goal.target_pose.pose.position.x = face_x
+            goal.target_pose.pose.position.y = face_y
+            goal.target_pose.pose.orientation.z = face_z
+            goal.target_pose.pose.orientation.w = face_w
+            goal.target_pose.header.stamp = rospy.Time.now()
+            
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+            s = np.arcsin(face_z)
+            c = np.arccos(face_w)
+            angle = np.sign(s)*np.sign(c)*np.abs(s)
+            new_face_z = np.sin(angle + np.pi/12)
+            new_face_w = np.cos(angle + np.pi/12)
+
+            goal.target_pose.pose.position.x = face_x
+            goal.target_pose.pose.position.y = face_y
+            goal.target_pose.pose.orientation.z = new_face_z
+            goal.target_pose.pose.orientation.w = new_face_w
+            goal.target_pose.header.stamp = rospy.Time.now()
+            
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)

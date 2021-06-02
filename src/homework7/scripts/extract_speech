@@ -70,6 +70,7 @@ def handle_detect_speech(req):
     print(req.name_of_file)
     st = SpeechTranscriber()
     text = st.recognize_speech(req.name_of_file)
+    print(text)
     print("Returning [%s %s %s]"%(text[0], text[1], text[2]))
     
     res = text[0] + " " + text[1] + " " + text[2]

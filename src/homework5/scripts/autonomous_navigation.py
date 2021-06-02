@@ -483,11 +483,11 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
 
             soundFile = ""
 
-            if (face_goal.coords[0] < 1) & (face_goal.coords[0] > 0.8) & (face_goal.coords[1] > 0.8) & (face_goal.coords[1] < 1):
+            if (face_goal.coords[0] < 1.1) & (face_goal.coords[0] > 0.7) & (face_goal.coords[1] > 0.5) & (face_goal.coords[1] < 1.1):
                 soundFile = "vijola_maska.wav"
-            elif (face_goal.coords[0] > -0.25) & (face_goal.coords[0] < 0.05) & (face_goal.coords[1] > -1.65) & (face_goal.coords[1] < -1.45):
+            elif (face_goal.coords[0] > -0.35) & (face_goal.coords[0] < 0.05) & (face_goal.coords[1] > -1.75) & (face_goal.coords[1] < -1.35):
                 soundFile = "oranzna_maska.wav"
-            elif (face_goal.coords[0] > 1.25) & (face_goal.coords[0] < 1.45) & (face_goal.coords[1] > 2.55) & (face_goal.coords[1] < 2.75):
+            elif (face_goal.coords[0] > 1) & (face_goal.coords[0] < 1.6) & (face_goal.coords[1] > 2.4) & (face_goal.coords[1] < 2.9):
                 soundFile = "brez_maske.wav"
             else:
                 soundFile = "azijka.wav"

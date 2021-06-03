@@ -277,6 +277,7 @@ def navigate():
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
             
+            print("Danger! Please move further apart.")
             soundhandle.say("Danger! Please move further apart.")
 
         elif goal_point[2] == 3: # Pot do obraza
@@ -325,8 +326,10 @@ def navigate():
             for i in faceData:
                 if (i["x"] == goal_point[0]) & (i["y"] == goal_point[1]):
                     if i["mask"] == False:
+                        print("Put on mask.")
                         soundhandle.say("Put on mask.")
 
+                    print("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
                     soundhandle.say("Have you been vaccinated? Who is your Doctor? How many hours per week do you Exercise?")
 
                     text = detect_speech_client(i["sound_file"])
@@ -358,12 +361,16 @@ def navigate():
                 time.sleep(1)
 
             qr_pub.publish(True)
-            while qr_results == "-":
+            num = 0
+            while qr_results == "-" and num<=5:
                 time.sleep(1)
+                num += 1
+            qr_result = qr_results
             qr_pub.publish(False)
 
-            cylinder_data[c] = qr_results
-            print(cylinder_data)
+            if qr_result != "-":
+                cylinder_data[c] = qr_result
+                print(cylinder_data)
 
         elif goal_point[2] == 1: # Pot do obroča
             goal.target_pose.pose.position.x = goal_point[0]
@@ -376,7 +383,6 @@ def navigate():
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
 
-            soundhandle.say(c)
 
         else: # Navadna pot
             goal.target_pose.pose.position.x = goal_point[0]

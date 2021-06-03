@@ -174,7 +174,7 @@ class The_Ring:
 
             if point is not None:
                 d = distance.cdist([point],self.centres[:self.num,:])
-                if self.num==0 or np.min(d)>0.5:
+                if self.num==0 or np.min(d)>0.4:
                     self.all_points.append([])
                     self.all_points[self.num].append(point)
                     self.centres[self.num,:] = point

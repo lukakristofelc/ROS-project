@@ -25,7 +25,7 @@ class CylinderMarkers:
         self.map_data = map_data
         self.map_resolution = ros_map.info.resolution
 
-        self.offset_dist = 5 # Change 
+        self.offset_dist = 7 # Change 
 
         self.cylinder_sub = rospy.Subscriber("/detected_cylinder_point", CylinderMsg, self.cylinder_callback)
 

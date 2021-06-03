@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node pkg="homework4" type="face_localizer_dnn" name="face_localizer_dnn"/>
+    <node pkg="homework7" type="extract_digits_but_better" name="extract_digits_but_better"/>
+    <node pkg="homework7" type="extract_speech" name="extract_speech"/>
+
+</launch>

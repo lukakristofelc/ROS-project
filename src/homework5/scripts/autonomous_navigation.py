@@ -164,14 +164,13 @@ def findShortestPath(transformedPoints: np.array):
     return permutation
 
 def tooClose():
-    global transformedPoints
     global attackedHumans
+    global faceData
 
     humanGoals = []
 
-    for point in transformedPoints:
-        if point[2] == 3:
-            humanGoals.insert(0,point)
+    for i in faceData:
+        humanGoals.insert(0, [i["x"], i["y"]])
 
     for i, humanGoal in enumerate(humanGoals):
         for other in humanGoals[i+1:]:

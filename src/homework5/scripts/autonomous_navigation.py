@@ -182,7 +182,7 @@ def tooClose():
                     if i[0] == humanGoal[0] and i[1] == humanGoal[1] or i[0] == other[0] and i[1] == other[1]:
                         attack = False
 
-            if (distance < 0.07) & attack:
+            if (distance < 0.04) & attack:
                 return [humanGoal, other]
     
     return None

@@ -223,6 +223,7 @@ def navigate():
     global cylinder_data
     global cylinderMarkerId
     global cylinderMarkersAll
+    global ring_data
 
     soundhandle = SoundClient()
 
@@ -246,10 +247,14 @@ def navigate():
     
     while transformedPoints.size > 0:
 
-        #for i in faceData:
-        #    if i["vaccinated"] == "0" and cylinder_data.get(i["doctor"]):
-        #        if i["vaccine"] == "":
-        #            i["vaccine"] = getRingColor(cylinder_data[i["doctor"]],i["age"],i["exercise"])
+        for i in faceData:
+            if i["vaccinated"] == 0 and cylinder_data.get(i["doctor"]):
+                if i["vaccine"] == "":
+                    i["vaccine"] = getRingColor(cylinder_data[i["doctor"]],i["age"],i["exercise"])
+                ring_data_array = np.array(ring_data)
+                if i["vaccine"] in ring_data_array[:,2]:
+                    idx = np.where(ring_data_array[:,2] == i["vaccine"])[0][0]
+                    transformedPoints = np.insert(transformedPoints, 0, [ring_data[idx][0], ring_data[idx][1] , 1], axis=0)
                 
 
         humansTooClose = tooClose() 
@@ -348,6 +353,8 @@ def navigate():
         elif goal_point[2] == 2: # Pot do cilindra
             colors = [x.color for x in cylinderMarkersAll if x.id == cylinderMarkerId[0]]
             c = classifyColor(colors[0])
+            if c == "black":
+                c = "blue"
             cylinderMarkerId = cylinderMarkerId[1:]
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]

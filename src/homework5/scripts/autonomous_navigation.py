@@ -255,6 +255,9 @@ def navigate():
                 if i["vaccine"] in ring_data_array[:,2]:
                     idx = np.where(ring_data_array[:,2] == i["vaccine"])[0][0]
                     transformedPoints = np.insert(transformedPoints, 0, [ring_data[idx][0], ring_data[idx][1] , 1], axis=0)
+                    transformedPoints = np.insert(transformedPoints, 1, [i["x"], i["y"] , 5], axis=0)
+                    faceOrientation = np.insert(faceOrientation, 0, [i["z"], i["w"]], axis=0)
+                    i["vaccinated"] = 1
                 
 
         humansTooClose = tooClose() 
@@ -271,7 +274,23 @@ def navigate():
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
 
-        if goal_point[2] == 4:
+        if goal_point[2] == 5:
+            goal.target_pose.pose.position.x = goal_point[0]
+            goal.target_pose.pose.position.y = goal_point[1]
+            goal.target_pose.pose.orientation.z = faceOrientation[0, 0]
+            goal.target_pose.pose.orientation.w = faceOrientation[0, 1]
+            goal.target_pose.header.stamp = rospy.Time.now()
+            faceOrientation = faceOrientation[1:, :]
+
+            action_client.send_goal(goal)
+            while action_client.get_state() in [0,1]:
+                time.sleep(1)
+
+            pub_arm.publish("extend")
+            time.sleep(2)
+            pub_arm.publish("retract")
+
+        elif goal_point[2] == 4:
             goal.target_pose.pose.position.x = goal_point[0]
             goal.target_pose.pose.position.y = goal_point[1]
             goal.target_pose.pose.orientation.z = faceOrientation[0, 0]
@@ -389,6 +408,9 @@ def navigate():
             action_client.send_goal(goal)
             while action_client.get_state() in [0,1]:
                 time.sleep(1)
+
+            pub_arm.publish("lift")
+            time.sleep(2)
 
 
         else: # Navadna pot
@@ -529,7 +551,7 @@ def faceGoalsCallback(face_goals_array: FaceGoalsArray):
             else:
                 soundFile = "azijka.wav"
 
-            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated": 0, "sound_file":soundFile})
+            faceData.insert(0, {'id': face_goals_num, 'x':face_goal.coords[0], 'y':face_goal.coords[1], 'z': face_goal.coords[2], 'w': face_goal.coords[3], 'mask':face_goal.wearing_mask, 'exercise':0, 'age':0, 'doctor':"", 'vaccine':"", "vaccinated": 0, "sound_file":soundFile})
         face_goals_num = len(face_goals_array.goals)
 
 def digitsResultsCallback(data: String):
